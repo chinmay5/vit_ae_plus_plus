@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import torchio as tio
 
 BASE_PATH = '/mnt/cat/chinmay/brats_processed/data/splits'
 
@@ -19,14 +20,16 @@ class FlairData(Dataset):
         return self.data.shape[0]
 
     def _normalize_data(self, volume):
-        volume = volume / 255  # Range of values [0, 1]
+        max_val, min_val = volume.max(), volume.min()
+        volume = (volume - min_val)/ (max_val - min_val)
         return 2 * volume - 1  # Range of values [1, -1]
 
     def __getitem__(self, item):
         volume = torch.tensor(self.data[item], dtype=torch.float)
-        volume = self._normalize_data(volume)
         if self.transform is not None:
-            return self.transform(volume)
+            volume = self.transform(volume)
+        # If we normalize first and then apply transforms, the range of input values is changed to exceed the limits
+        volume = self._normalize_data(volume)
         if self.labels is not None:
             return volume, torch.tensor(self.labels[item])
         return volume
@@ -43,11 +46,20 @@ def build_dataset(is_train, args=None, transforms=None):
 
 
 if __name__ == '__main__':
-    data = FlairData()
+    transforms = [
+        tio.RandomAffine(),
+        tio.RandomBlur(),
+        tio.RandomNoise(std=0.5),
+        tio.RandomGamma(log_gamma=(-0.3, 0.3))
+    ]
+    transformations = tio.Compose(transforms)
+
+    data = FlairData(transform=transformations)
     sample = data[0]
     print(sample.shape)
     data_loader = torch.utils.data.DataLoader(data, batch_size=4)
     min_val, max_val = float("inf"), 0
+
     for batch_data in data_loader:
         if batch_data.max() > max_val:
             max_val = batch_data.max()

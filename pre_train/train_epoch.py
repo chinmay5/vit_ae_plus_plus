@@ -35,6 +35,7 @@ from torch.utils.tensorboard import SummaryWriter
 import timm.optim.optim_factory as optim_factory
 import time
 import json
+import torchio as tio
 
 
 def train_one_epoch(model: torch.nn.Module,
@@ -134,9 +135,9 @@ def get_args_parser():
 
     parser.add_argument('--lr', type=float, default=None, metavar='LR',
                         help='learning rate (absolute lr)')
-    parser.add_argument('--blr', type=float, default=1.5e-2, metavar='LR',
+    parser.add_argument('--blr', type=float, default=1e-3, metavar='LR',
                         help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')
-    parser.add_argument('--min_lr', type=float, default=1e-4, metavar='LR',  # earlier 0
+    parser.add_argument('--min_lr', type=float, default=0, metavar='LR',  # earlier 0
                         help='lower lr bound for cyclic schedulers that hit 0')
 
     parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
@@ -191,14 +192,14 @@ def main(args):
     cudnn.benchmark = True
 
     # simple augmentation
-    # transform_train = transforms.Compose([
-    #     transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-    #     transforms.RandomHorizontalFlip(),
-    #     transforms.ToTensor(),
-    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
-    # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
-    # Add the transform at a later time
-    dataset_train = FlairData(transform=None)
+    transforms = [
+        tio.RandomAffine(),
+        tio.RandomBlur(),
+        tio.RandomNoise(std=0.5),
+        tio.RandomGamma(log_gamma=(-0.3, 0.3))
+    ]
+    transformations = tio.Compose(transforms)
+    dataset_train = FlairData(transform=transformations)
     print(dataset_train)
 
     if False:  # args.distributed:

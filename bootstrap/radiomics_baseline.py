@@ -6,7 +6,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="0"
 from sklearn.model_selection import StratifiedKFold, KFold
 import matplotlib.pyplot as plt
 from sklearn.ensemble import ExtraTreesClassifier
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 import random
 from sklearn.decomposition import PCA
@@ -244,6 +244,8 @@ plt.show()
 # print(temp_pred_rad)
 # print(temp_label)
 temp_pred_rad_ = temp_pred_rad
+roc_auc_score_rad = roc_auc_score(temp_label, temp_pred_rad_)
+
 temp_pred_rad[temp_pred_rad>=0.65] = 1
 temp_pred_rad[temp_pred_rad<0.65] = 0
 cm = confusion_matrix(temp_pred_rad, temp_label)
@@ -253,8 +255,11 @@ print('Radiomics alone:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
+print("roc_auc_score:", roc_auc_score_rad)
+
 
 temp_pred_ssl_=temp_pred_ssl
+roc_auc_score_ssl = roc_auc_score(temp_label, temp_pred_ssl_)
 temp_pred_ssl[temp_pred_ssl>=0.5] = 1
 temp_pred_ssl[temp_pred_ssl<0.5] = 0
 cm = confusion_matrix(temp_pred_ssl, temp_label)
@@ -264,8 +269,10 @@ print('SSL alone:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
+print("roc_auc_score:", roc_auc_score_ssl)
 
 temp_pred_ssl_KMS_=temp_pred_ssl_KMS
+roc_auc_score_KMS = roc_auc_score(temp_label, temp_pred_ssl_KMS_)
 temp_pred_ssl_KMS[temp_pred_ssl_KMS>=0.5] = 1
 temp_pred_ssl_KMS[temp_pred_ssl_KMS<0.5] = 0
 cm = confusion_matrix(temp_pred_ssl_KMS, temp_label)
@@ -275,8 +282,10 @@ print('SSL-KMS alone:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
+print("roc_auc_score:", roc_auc_score_KMS)
 
 temp_pred_ssl_RW_=temp_pred_ssl_RW
+roc_auc_score_RW = roc_auc_score(temp_label, temp_pred_ssl_RW_)
 temp_pred_ssl_RW[temp_pred_ssl_RW>=0.5] = 1
 temp_pred_ssl_RW[temp_pred_ssl_RW<0.5] = 0
 cm = confusion_matrix(temp_pred_ssl_RW, temp_label)
@@ -286,8 +295,10 @@ print('SSL-RW alone:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
+print("roc_auc_score:", roc_auc_score_RW)
 
 temp_pred_combined_= temp_pred_combined
+roc_auc_score_combined = roc_auc_score(temp_label, temp_pred_combined_)
 temp_pred_combined[temp_pred_combined>=0.5] = 1
 temp_pred_combined[temp_pred_combined<0.5] = 0
 cm = confusion_matrix(temp_pred_combined, temp_label)
@@ -297,9 +308,10 @@ print('Combined:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
-
+print("roc_auc_score:", roc_auc_score_combined)
 
 temp_pred_combined_2_= temp_pred_combined_2
+roc_auc_score_combined_2 = roc_auc_score(temp_label, temp_pred_combined_2_)
 temp_pred_combined_2[temp_pred_combined_2>=0.6] = 1
 temp_pred_combined_2[temp_pred_combined_2<0.6] = 0
 cm = confusion_matrix(temp_pred_combined_2, temp_label)
@@ -309,9 +321,10 @@ print('Combined with KMS:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
-
+print("roc_auc_score", roc_auc_score_combined_2)
 
 temp_pred_combined_3_= temp_pred_combined_3
+roc_auc_score_combined_3 = roc_auc_score(temp_label, temp_pred_combined_3)
 temp_pred_combined_3[temp_pred_combined_3>=0.6] = 1
 temp_pred_combined_3[temp_pred_combined_3<0.6] = 0
 cm = confusion_matrix(temp_pred_combined_3, temp_label)
@@ -321,7 +334,7 @@ print('Combined with RW:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
-
+print("roc_auc_score", roc_auc_score_combined_3)
 
 # temp_pred_combined_3_= temp_pred_combined_3
 # temp_pred_combined_3[temp_pred_combined_3>=0.6] = 1
