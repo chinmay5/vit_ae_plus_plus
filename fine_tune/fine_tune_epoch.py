@@ -27,6 +27,7 @@ import utils.lr_decay as lrd
 import time
 import json
 import datetime
+import torchio as tio
 
 
 def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, loss_scaler,
@@ -215,7 +216,7 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-300.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-380.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
     # parser.set_defaults(global_pool=True)
@@ -277,8 +278,15 @@ def main(args):
     cudnn.benchmark = True
 
     # TODO: Add the transforms. We won't be using cutmix, mixup etc but the conventional ones.
-    dataset_train = build_dataset(is_train=True, args=args, transforms=None)
-    dataset_val = build_dataset(is_train=False, args=args, transforms=None)
+    transforms = [
+        tio.RandomAffine(),
+        tio.RandomBlur(),
+        tio.RandomNoise(std=0.5),
+        tio.RandomGamma(log_gamma=(-0.3, 0.3))
+    ]
+    train_transforms = tio.Compose(transforms)
+    dataset_train = build_dataset(mode='train', args=args, transforms=train_transforms)
+    dataset_val = build_dataset(mode='valid', args=args, transforms=None)
 
     if False:  # args.distributed:
         num_tasks = misc.get_world_size()
@@ -398,7 +406,7 @@ def main(args):
     elif args.smoothing > 0.:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
-        criterion = torch.nn.CrossEntropyLoss()
+        criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([3.0, 1.0]).to(device))  # Label 1 occurs ~3 times more than 0
         # criterion = torch.nn.BCEWithLogitsLoss()
 
     print("criterion = %s" % str(criterion))

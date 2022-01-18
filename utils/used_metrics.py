@@ -1,13 +1,20 @@
 import torch
 from sklearn.metrics import confusion_matrix, roc_auc_score
+from sklearn.preprocessing import OneHotEncoder
+import numpy as np
 
+# Need to convert the values in one-hot encoding
+enc = OneHotEncoder()
+possible_labels = np.array([0, 1]).reshape(-1, 1)
+enc.fit(possible_labels)
 
 def roc_auc(predictions, target):
-    predictions = torch.sigmoid(predictions)
-    predictions = predictions[:, 1]
+    # Converting raw scores into probabilities
+    predictions = torch.softmax(predictions, dim=1)
     predictions, target = predictions.cpu().numpy(), target.cpu().numpy()
+    target_one_hot = enc.transform(target.reshape(-1, 1)).toarray() # Reshaping needed by the library
     # Arguments take 'GT' before taking 'predictions'
-    return roc_auc_score(target, predictions)
+    return roc_auc_score(target_one_hot, predictions)
 
 
 def find_vals(predictions, target):
@@ -25,6 +32,13 @@ def find_vals(predictions, target):
 
 
 if __name__ == '__main__':
+    y = np.array([0, 1, 1, 0])
+    # y = np.array([0, 1, 1, 0]).reshape(-1, 1)
+    # enc.fit(possible_labels)
+    # y = enc.transform(y).toarray()
+    # print(y)
     x = torch.randn((4, 2))
-    y = torch.tensor([0, 1, 1, 0])
+    # y = torch.as_tensor(y).squeeze()
+    y = torch.as_tensor(y)
     print(roc_auc(x, y))
+    print(find_vals(x, y))

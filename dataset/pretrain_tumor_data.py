@@ -38,9 +38,22 @@ class FlairData(Dataset):
         return f"Pre-train Flair MRI data with transforms = {self.transform}"
 
 
-def build_dataset(is_train, args=None, transforms=None):
-    filename = 'x_train_ssl.npy' if is_train else 'x_val_ssl.npy'
-    label_name = 'y_train_ssl.npy' if is_train else 'y_val_ssl.npy'
+def build_dataset(mode, args=None, transforms=None):
+    assert mode in ['train', 'valid', 'test', 'feat_extract'], "Invalid Mode selected"
+    if mode == 'feat_extract':
+        # A special case where we simply use all the data in our feature extraction pipeline. So, no augmentations
+        # and the split file would be combination of both train and val
+        return FlairData(filename='feature_extraction_x.npy', transform=None, label_name='feature_extraction_labels.npy')
+    if mode == 'train':
+        filename = 'x_train_ssl.npy'
+        label_name = 'y_train_ssl.npy'
+    elif mode == 'valid':
+        filename = 'x_val_ssl.npy'
+        label_name = 'y_val_ssl.npy'
+    else:
+        # Because of assert security net, this is test mode
+        filename = 'feature_extraction_test_x.npy'
+        label_name = 'feature_extraction_test_labels.npy'
     return FlairData(filename=filename, transform=transforms, label_name=label_name)
 
 
@@ -67,17 +80,28 @@ if __name__ == '__main__':
             min_val = batch_data.min()
     print(f"Max value is {max_val}, min value {min_val}")
     # Also a check for other data splits
-    # train_data = build_dataset(is_train=True)
-    # data_loader = torch.utils.data.DataLoader(train_data, batch_size=16)
-    # for batch_data, labels in data_loader:
-    #     print(batch_data.shape)
-    #     print(labels.dtype)
+    train_data = build_dataset(mode='train')
+    data_loader = torch.utils.data.DataLoader(train_data, batch_size=16)
+    min_val, max_val = float("inf"), 0
+    all_ones, total = 0, 0
+    for batch_data, labels in data_loader:
+        all_ones += labels.sum()
+        total += labels.shape[0]
+        if batch_data.max() > max_val:
+            max_val = batch_data.max()
+        if batch_data.min() < min_val:
+            min_val = batch_data.min()
+    print(f"% of ones {all_ones/total}")
+    print(f"Max value is {max_val}, min value {min_val}")
     #     break
     # Checking for the validation split
-    # val_data = build_dataset(is_train=False)
-    # data_loader = torch.utils.data.DataLoader(val_data, batch_size=16)
-    # for batch_data, labels in data_loader:
-    #     print(batch_data.shape)
-    #     print(labels.dtype)
-    #     break
+    test_data = build_dataset(mode='feat_extract')
+    data_loader = torch.utils.data.DataLoader(test_data, batch_size=16)
+    min_val, max_val = float("inf"), 0
+    for batch_data, labels in data_loader:
+        if batch_data.max() > max_val:
+            max_val = batch_data.max()
+        if batch_data.min() < min_val:
+            min_val = batch_data.min()
+    print(f"Max value is {max_val}, min value {min_val}")
 

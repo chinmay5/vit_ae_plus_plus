@@ -12,11 +12,12 @@ data_raw = np.load(file_path)
 save_folder = os.path.join(BASE_PATH, 'splits')
 os.makedirs(save_folder, exist_ok=True)
 
-file_locs = {"train_save_path":os.path.join(save_folder, 'x_train_ssl.npy'),
+file_locs = {"train_save_path": os.path.join(save_folder, 'x_train_ssl.npy'),
              "val_save_path": os.path.join(save_folder, 'x_val_ssl.npy'),
              "train_label_path": os.path.join(save_folder, 'y_train_ssl.npy'),
              "val_label_path": os.path.join(save_folder, 'y_val_ssl.npy')
              }
+
 
 def create_splits():
     if any([os.path.exists(x) for x in file_locs.values()]):
@@ -28,7 +29,8 @@ def create_splits():
     # We can use the train indices and create a validation split from them
     all_labels = np.load(os.path.join('/mnt/cat/chinmay/brats_processed', 'label_all.npy'))
     train_labels = all_labels[train_indices]
-    train_idx_ssl, val_idx_ssl = train_test_split(train_indices, train_size=0.85, stratify=train_labels, random_state=42)
+    train_idx_ssl, val_idx_ssl = train_test_split(train_indices, train_size=0.85, stratify=train_labels,
+                                                  random_state=42)
     X_train_ssl = data_raw[train_idx_ssl]
     X_val_ssl = data_raw[val_idx_ssl]
     y_train_ssl = all_labels[train_idx_ssl]
@@ -41,5 +43,22 @@ def create_splits():
     np.save(os.path.join(save_folder, 'y_val_ssl.npy'), y_val_ssl)
 
 
+def create_ssl_extraction_dataset():
+    train_indices = np.load(os.path.join(BASE_PATH, 'train_indices.npy'))
+    all_labels = np.load(os.path.join('/mnt/cat/chinmay/brats_processed', 'label_all.npy'))
+    feature_extraction_labels = all_labels[train_indices]
+    feature_extraction_x = data_raw[train_indices]
+    np.save(os.path.join(save_folder, 'feature_extraction_labels.npy'), feature_extraction_labels)
+    np.save(os.path.join(save_folder, 'feature_extraction_x.npy'), feature_extraction_x)
+
+def create_ssl_test_split_dataset():
+    test_indices = np.load(os.path.join(BASE_PATH, 'test_indices.npy'))
+    all_labels = np.load(os.path.join('/mnt/cat/chinmay/brats_processed', 'label_all.npy'))
+    test_feature_extraction_labels = all_labels[test_indices]
+    test_feature_extraction_x = data_raw[test_indices]
+    np.save(os.path.join(save_folder, 'feature_extraction_test_labels.npy'), test_feature_extraction_labels)
+    np.save(os.path.join(save_folder, 'feature_extraction_test_x.npy'), test_feature_extraction_x)
+
+
 if __name__ == '__main__':
-    create_splits()
+    create_ssl_test_split_dataset()

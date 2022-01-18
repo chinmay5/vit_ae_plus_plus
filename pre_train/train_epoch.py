@@ -106,7 +106,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
     parser.add_argument('--batch_size', default=4, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--epochs', default=1000, type=int)
+    parser.add_argument('--epochs', default=400, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
@@ -193,6 +193,7 @@ def main(args):
     cudnn.benchmark = True
 
     # simple augmentation
+    # TODO: Put argument values.
     transforms = [
         tio.RandomAffine(),
         tio.RandomBlur(),

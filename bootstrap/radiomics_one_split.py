@@ -2,6 +2,9 @@ import numpy as np
 from sklearn import svm, datasets
 import os
 from sklearn import metrics
+
+from environment_setup import PROJECT_ROOT_DIR
+
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
 from sklearn.model_selection import StratifiedKFold, KFold, train_test_split
 import matplotlib.pyplot as plt
@@ -110,6 +113,7 @@ temp_pred_combined_2 = classification(train_features=train_X_combined_2_, train_
 temp_pred_combined_3 = classification(train_features=train_X_combined_3_, train_label=train_y_, test_features=test_X_combined_3_)
 #   temp_pred_combined_3 = classification(train_X_combined_3, train_y, val_X_combined_3)
 
+print(f"Number of train samples: {train_X_combined_.shape} and test samples: {temp_pred_combined.shape}")
 
 temp_label = test_y_
 temp_pred_rad = temp_pred_rad[:, 1]
@@ -257,3 +261,20 @@ print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
 
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'ssl_features_dir')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+# TODO: Should we load train_y_ from our splits???
+temp_pred_vit = classification(train_features=train_X_vit, train_label=train_y_, test_features=test_X_vit)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+temp_pred_vit[temp_pred_vit>=0.4] = 1
+temp_pred_vit[temp_pred_vit<0.4] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
