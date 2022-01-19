@@ -120,10 +120,10 @@ def get_args_parser():
     parser.add_argument('--in_channels', default=1, type=int,
                         help='Number of channels in the input')
 
-    parser.add_argument('--patch_size', default=6, type=int,
+    parser.add_argument('--patch_size', default=8, type=int,
                         help='Patch size for dividing the input')
 
-    parser.add_argument('--mask_ratio', default=0.75, type=float,
+    parser.add_argument('--mask_ratio', default=0.50, type=float,
                         help='Masking ratio (percentage of removed patches).')
 
     parser.add_argument('--norm_pix_loss', action='store_true',

@@ -15,8 +15,10 @@ META_DATA_DIR = os.path.join(BASE_DIR, 'data_files')
 MRI_IMG_DIR = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'Duke-Breast-Cancer-MRI')
 SAVE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'cropped_images')
 SPLIT_SAVE_FILE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'data_splits')
+RADIOMICS_SAVE_FILE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'radiomics_feat')
 os.makedirs(SAVE_PATH, exist_ok=True)
 os.makedirs(SPLIT_SAVE_FILE_PATH, exist_ok=True)
+os.makedirs(RADIOMICS_SAVE_FILE_PATH, exist_ok=True)
 
 required_cols = ['Patient ID', 'Mol Subtype']
 converters = {
@@ -126,8 +128,68 @@ def handle_bad_files_from_first_round():
 
 def sanity_check(train_split, val_split, test_split):
     train_set, val_set, test_set = set(train_split), set(val_split), set(test_split)
-    length_arr = [len(train_set.intersection(val_set)), len(train_set.intersection(test_set)), len(test_set.intersection(val_set))]
+    length_arr = [len(train_set.intersection(val_set)), len(train_set.intersection(test_set)),
+                  len(test_set.intersection(val_set))]
     return all([x == 0 for x in length_arr])
+
+
+def read_radiomics_labels():
+    filename = os.path.join(META_DATA_DIR, 'Clinical_and_Other_Features.xlsx')
+    label_df = pd.read_excel(filename, engine='openpyxl', skiprows=[0, 2], usecols=required_cols, converters=converters,
+                             index_col=0)
+    labels_dict = {}
+    for scan_name in tqdm(label_df.index):
+        labels_dict[scan_name] = label_df.loc[scan_name].item()
+    return labels_dict
+
+
+def save_radiomics_data():
+    filename = os.path.join(META_DATA_DIR, 'Imaging_Features.xlsx')
+    df = pd.read_excel(filename, engine='openpyxl',
+                       index_col=0)
+    radiomics_features_dict = {}
+    for scan_name in tqdm(df.index):
+        radiomics_features_dict[scan_name] = df.loc[scan_name]
+    pickle.dump(radiomics_features_dict, open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'radiomics_all.pkl'), 'wb'))
+
+
+def train_val_radiomics_feat():
+    labels_dict = read_radiomics_labels()
+    radiomics_features_dict = pickle.load(open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'radiomics_all.pkl'), 'rb'))
+    train_split_indices = pickle.load(open(os.path.join(SPLIT_SAVE_FILE_PATH, 'train.pkl'), 'rb'))
+    val_split_indices = pickle.load(open(os.path.join(SPLIT_SAVE_FILE_PATH, 'val.pkl'), 'rb'))
+    test_split_indices = pickle.load(open(os.path.join(SPLIT_SAVE_FILE_PATH, 'test.pkl'), 'rb'))
+    # The indices have items of the form 'Breast_MRI_208.npy', we just need the patientId. Hence,
+    train_split_indices = [x[:x.find('.npy')] for x in train_split_indices]
+    val_split_indices = [x[:x.find('.npy')] for x in val_split_indices]
+    test_split_indices = [x[:x.find('.npy')] for x in test_split_indices]
+    # Now we store values in an array
+    train_numpy_feat, val_numpy_feat, test_numpy_feat = [], [], []
+    train_numpy_labels, val_numpy_labels, test_numpy_labels = [], [], []
+    for idx in train_split_indices:
+        train_numpy_feat.append(radiomics_features_dict[idx])
+        train_numpy_labels.append(labels_dict[idx])
+    train_numpy_feat = np.stack(train_numpy_feat)
+    train_numpy_labels = np.stack(train_numpy_labels)
+    # Similarly for the validation elements
+    for idx in val_split_indices:
+        val_numpy_feat.append(radiomics_features_dict[idx])
+        val_numpy_labels.append(labels_dict[idx])
+    val_numpy_feat = np.stack(val_numpy_feat)
+    val_numpy_labels = np.stack(val_numpy_labels)
+    # Finally for the test set
+    for idx in test_split_indices:
+        test_numpy_feat.append(radiomics_features_dict[idx])
+        test_numpy_labels.append(labels_dict[idx])
+    test_numpy_feat = np.stack(test_numpy_feat)
+    test_numpy_labels = np.stack(test_numpy_labels)
+    # Now save all these scans
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_feat.npy'), train_numpy_feat)
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_labels.npy'), train_numpy_labels)
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'val_feat.npy'), val_numpy_feat)
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'val_labels.npy'), val_numpy_labels)
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_feat.npy'), test_numpy_feat)
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'), test_numpy_labels)
 
 
 def train_val_test_splits():
@@ -143,11 +205,11 @@ def train_val_test_splits():
     assert sanity_check(train_split=train_split, val_split=val_split,
                         test_split=test_split), "Splitting process caused overlap. Aborting!"
     # Now we can save the elements
-    print(f"Creating dataset with train_len {len(train_split)}, val_len {len(val_split)} and test_len {len(test_split)}")
+    print(
+        f"Creating dataset with train_len {len(train_split)}, val_len {len(val_split)} and test_len {len(test_split)}")
     pickle.dump(train_split, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'train.pkl'), 'wb'))
     pickle.dump(val_split, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'val.pkl'), 'wb'))
     pickle.dump(test_split, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'test.pkl'), 'wb'))
-
 
 
 if __name__ == '__main__':
@@ -158,4 +220,6 @@ if __name__ == '__main__':
     # pickle.dump(bad_files, open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'wb'))
     # handle_bad_files_from_first_round()
     # pickle.dump(bad_files, open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'wb'))
-    train_val_test_splits()
+    # train_val_test_splits()
+    save_radiomics_data()
+    train_val_radiomics_feat()

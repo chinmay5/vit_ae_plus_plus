@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from utils import misc
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 from pathlib import Path
 
@@ -69,7 +69,7 @@ def get_args_parser():
                         help='Patch size for dividing the input')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-380.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-100.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
     # parser.set_defaults(global_pool=True)
