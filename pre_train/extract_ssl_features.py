@@ -22,7 +22,7 @@ ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'ssl_features_dir')
 os.makedirs(ssl_feature_dir, exist_ok=True)
 
 @torch.no_grad()
-def generate_features(data_loader, model, device, feature_file_name='features.npy', label_file_name='gt_labels.npy'):
+def generate_features(data_loader, model, device, feature_file_name='features.npy', label_file_name='gt_labels.npy', log_writer=None):
     # switch to evaluation mode
     model.eval()
     outGT = torch.FloatTensor().to(device)
@@ -44,6 +44,9 @@ def generate_features(data_loader, model, device, feature_file_name='features.np
     if label_file_name is not None:
         print("Saving labels!!!")
         np.save(os.path.join(ssl_feature_dir, label_file_name), outGT.cpu().numpy())
+    if log_writer is not None:
+        metadata = [x.item() for x in outGT]
+        log_writer.add_embedding(outPRED, metadata=metadata, tag='ssl_embedding')
 
 
 def get_args_parser():
@@ -75,9 +78,7 @@ def get_args_parser():
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
 
-    parser.add_argument('--output_dir', default='./output_dir',
-                        help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='./output_dir',
+    parser.add_argument('--log_dir', default='output_dir/logs',
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -134,6 +135,8 @@ def main(args):
     )
 
     model = get_models(model_name='vit', args=args)
+    args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
+    train_writer = SummaryWriter(args.log_dir)
 
     if args.finetune and not args.eval:
         args.finetune = os.path.join(PROJECT_ROOT_DIR, args.finetune)
@@ -161,13 +164,11 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    generate_features(data_loader_train, model, device)
+    generate_features(data_loader_train, model, device, log_writer=train_writer)
     generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None)
 
 
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
-    if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)

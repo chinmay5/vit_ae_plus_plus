@@ -81,7 +81,7 @@ np.save(test_indices_save_path, test_idx)
 def classification(train_features, train_label, test_features):
    # lin_clf = svm.LinearSVC()
    # lin_clf.fit(train_features, train_label)
-    clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear',)
+    clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear',random_state=42)
     clf.fit(train_features, train_label)
     # svm.SVC(C=100.0, cache_size=200, class_weight=False, coef0=0.0,
     # decision_function_shape='ovr', degree=3, gamma='auto', kernel='linear',
