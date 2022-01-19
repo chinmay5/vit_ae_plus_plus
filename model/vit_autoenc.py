@@ -237,60 +237,6 @@ def mae_vit_base_patch16_dec512d8b(**kwargs):
 mae_vit_base_patch16 = mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 
-
-def _viz_one_patch(model):
-    from matplotlib import pyplot as plt
-    import os
-    import nibabel as nib
-    from environment_setup import PROJECT_ROOT_DIR
-
-    # def show_image(image, title=''):
-    #     # image is [H, W, 3]
-    #     assert image.shape[2] == 1
-    #     plt.imshow(torch.clip(image * 255, 0, 255).int())
-    #     plt.title(title, fontsize=16)
-    #     plt.axis('off')
-    #     return
-
-    BASE_PATH = '/mnt/cat/chinmay/brats_processed/data/image'
-
-
-    file_path = os.path.join(BASE_PATH, 'flair_all.npy')
-    data = np.load(file_path)
-    one_sample = data.transpose([0, 4, 1, 2, 3])[0:1]
-    x = torch.as_tensor(one_sample, dtype=torch.float)
-    # make it a batch-like
-
-    # run MAE
-    loss, y, mask = model(x.float(), mask_ratio=0.75)
-    y = model.unpatchify(y)
-
-    # visualize the mask
-    mask = mask.detach()
-    mask = mask.unsqueeze(-1).repeat(1, 1, model.patch_embed.patch_size[0] ** 3 * 1)  # (N, L*H*W, p*p*1) 1=num_channel
-    mask = model.unpatchify(mask)  # 1 is removing, 0 is keeping
-    mask = torch.einsum('nclhw->nlhwc', mask).detach().cpu()
-
-    x = torch.einsum('nclhw->nlhwc', x)
-
-    # masked image
-    im_masked = x * (1 - mask)
-
-    # plt.subplot(1, 4, 1)
-    # show_image(x[0][0], "original")
-
-    # plt.subplot(1, 4, 2)
-    # show_image(im_masked[0][0], "masked")
-
-    # plt.show()
-    save_path = os.path.join(PROJECT_ROOT_DIR, 'temp')
-    os.makedirs(save_path, exist_ok=True)
-    img = nib.Nifti1Image(im_masked.numpy()[0].astype(np.int8), np.eye(4))
-    print("File saving started")
-    nib.save(img, os.path.join(save_path, 'test4d.nii.gz'))
-    # nib.save(img, os.path.join('build', 'test4d.nii.gz'))
-
-
 if __name__ == '__main__':
     image_size = (96, 96, 96)
     model = mae_vit_base_patch16(volume_size=image_size, in_chans=1, patch_size=8)
@@ -298,4 +244,4 @@ if __name__ == '__main__':
     loss, pred, mask = model(sample_img)
     print(pred.shape)
     print(loss.item())
-    _viz_one_patch(model=model)
+

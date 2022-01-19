@@ -3,6 +3,8 @@ import os
 
 from tqdm import tqdm
 
+from utils import misc
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 from pathlib import Path
@@ -166,6 +168,9 @@ def main(args):
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
     generate_features(data_loader_train, model, device, log_writer=train_writer)
     generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None)
+    # Also, let us save the vit model. We need not go through the entire process of getting the vit from autoenc everytime
+    ssl_file_name = os.path.join(PROJECT_ROOT_DIR, 'output_dir', 'checkpoints', 'ssl_feat.pth')
+    torch.save(model.state_dict(), ssl_file_name)
 
 
 if __name__ == '__main__':
