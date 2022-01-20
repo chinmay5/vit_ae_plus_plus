@@ -12,6 +12,8 @@ import argparse
 import math
 import os
 
+from dataset.dataset_factory import get_dataset
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import sys
 from pathlib import Path
@@ -57,7 +59,7 @@ def train_one_epoch(model: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    for data_iter_step, (samples) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (samples, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
@@ -145,8 +147,8 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
-                        help='dataset path')
+    parser.add_argument('--dataset', default='brats', type=str,
+                        help='dataset name')
 
     parser.add_argument('--output_dir', default='output_dir',
                         help='path where to save, empty for no saving')
@@ -201,7 +203,7 @@ def main(args):
         tio.RandomGamma(log_gamma=(-0.3, 0.3))
     ]
     transformations = tio.Compose(transforms)
-    dataset_train = FlairData(transform=transformations)
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='feat_extract', args=args, transforms=transformations)
     print(dataset_train)
 
     if False:  # args.distributed:

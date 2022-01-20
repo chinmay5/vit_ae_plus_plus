@@ -255,6 +255,7 @@ def purge_nans(labels_dict, radiomics_features_dict, split_indices):
 
 def train_val_test_splits():
     files = os.listdir(os.path.join(SAVE_PATH))
+    random.seed(42)
     random.shuffle(files)
     total_len = len(files)
     train_len = int(0.8 * total_len)

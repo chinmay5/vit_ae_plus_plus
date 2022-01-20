@@ -2,6 +2,7 @@ import argparse
 import math
 import os
 
+from dataset.dataset_factory import get_dataset
 from utils.used_metrics import roc_auc
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
@@ -13,7 +14,6 @@ import numpy as np
 import torch
 from torch.backends import cudnn
 
-from dataset.brain_tumor.pretrain_tumor_data import build_dataset
 from model.model_utils.vit_helpers import interpolate_pos_embed
 
 from model.model_factory import get_models
@@ -224,8 +224,8 @@ def get_args_parser():
                         help='Use class token instead of global pool for classification')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
-                        help='dataset path')
+    parser.add_argument('--dataset', default='brats', type=str,
+                        help='dataset name')
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
 
@@ -285,8 +285,8 @@ def main(args):
         tio.RandomGamma(log_gamma=(-0.3, 0.3))
     ]
     train_transforms = tio.Compose(transforms)
-    dataset_train = build_dataset(mode='train', args=args, transforms=train_transforms)
-    dataset_val = build_dataset(mode='valid', args=args, transforms=None)
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms)
+    dataset_val = get_dataset(dataset_name=args.dataset, mode='valid', args=args, transforms=None)
 
     if False:  # args.distributed:
         num_tasks = misc.get_world_size()
