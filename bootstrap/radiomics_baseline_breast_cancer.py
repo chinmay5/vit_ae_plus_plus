@@ -3,6 +3,8 @@ from sklearn import svm, datasets
 import os
 from sklearn import metrics
 
+from environment_setup import PROJECT_ROOT_DIR
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from sklearn.metrics import confusion_matrix, roc_auc_score
 
@@ -61,6 +63,7 @@ def classification(train_features, train_label, test_features):
     return pred
 
 
+
 temp_pred_rad = classification(train_features=train_numpy_feat, train_label=train_numpy_labels,
                                test_features=test_numpy_feat)
 
@@ -85,4 +88,62 @@ specificity = cm[0, 0] / (cm[0, 0] + cm[1, 0])
 print('Radiomics alone:')
 print('specificity:', specificity)
 sensitivity = cm[1, 1] / (cm[1, 1] + cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+# Using a combination of train and val split as the train split. The val split should be used in order to get the hyper-parameters
+train_numpy_feat = np.concatenate((train_numpy_feat, val_numpy_feat), axis=0)
+train_numpy_labels = np.concatenate((train_numpy_labels, val_numpy_labels), axis=0)
+
+# TODO: Modularize this
+temp_pred_rad = classification(train_features=train_numpy_feat, train_label=train_numpy_labels,
+                               test_features=test_numpy_feat)
+
+print(f"Number of train samples: {train_numpy_feat.shape[0]} and test samples: {test_numpy_feat.shape[0]}")
+
+temp_label = test_numpy_labels
+temp_pred_rad = temp_pred_rad[:, 1]
+
+# fig = plt.figure(1)
+# plot = fig.add_subplot(111)
+# fpr, tpr, _ = metrics.roc_curve(temp_label,  temp_pred_rad)
+# auc = metrics.roc_auc_score(temp_label, temp_pred_rad)
+# plt.plot(fpr,tpr,label="trad. radiomics, AUC = "+str(auc)[0:5])
+# plt.legend(loc=4, prop={'size': 12})
+
+temp_pred_rad_ = temp_pred_rad
+temp_pred_rad[temp_pred_rad >= 0.5] = 1
+temp_pred_rad[temp_pred_rad < 0.5] = 0
+cm = confusion_matrix(temp_pred_rad, temp_label)
+print(cm)
+specificity = cm[0, 0] / (cm[0, 0] + cm[1, 0])
+print('Radiomics alone:')
+print('specificity:', specificity)
+sensitivity = cm[1, 1] / (cm[1, 1] + cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'breast_cancer', 'ssl_features_dir')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
+    test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_vit, train_label=train_numpy_labels, test_features=test_X_vit)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)

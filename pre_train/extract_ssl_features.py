@@ -3,6 +3,8 @@ import os
 
 from tqdm import tqdm
 
+from dataset.dataset_factory import get_dataset
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import numpy as np
@@ -15,12 +17,10 @@ from environment_setup import PROJECT_ROOT_DIR
 from model.model_factory import get_models
 from model.model_utils.vit_helpers import interpolate_pos_embed
 
-# Create the directory for saving SSL features
-ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'ssl_features_dir')
-os.makedirs(ssl_feature_dir, exist_ok=True)
+
 
 @torch.no_grad()
-def generate_features(data_loader, model, device, feature_file_name='features.npy', label_file_name='gt_labels.npy', log_writer=None):
+def generate_features(data_loader, model, device, ssl_feature_dir, feature_file_name='features.npy', label_file_name='gt_labels.npy', log_writer=None):
     # switch to evaluation mode
     model.eval()
     outGT = torch.FloatTensor().to(device)
@@ -51,6 +51,8 @@ def get_args_parser():
     parser = argparse.ArgumentParser('MAE ssl feature extraction module', add_help=False)
     parser.add_argument('--batch_size', default=4, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
+    parser.add_argument('--dataset', default='breast_cancer', type=str,
+                        help='dataset name')
     # Model parameters
     parser.add_argument('--model', default='mae_vit_base_patch16', type=str, metavar='MODEL',
                         help='Name of model to train')
@@ -65,7 +67,7 @@ def get_args_parser():
                         help='Patch size for dividing the input')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-100.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-60.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
     # parser.set_defaults(global_pool=True)
@@ -111,8 +113,13 @@ def main(args):
 
     cudnn.benchmark = True
 
-    dataset_train = build_dataset(mode='feat_extract')
-    dataset_test = build_dataset(mode='test')
+
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='feat_extract', args=args)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args)
+
+    # Create the directory for saving the features
+    ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir')
+    os.makedirs(ssl_feature_dir, exist_ok=True)
 
     sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
@@ -162,8 +169,8 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    generate_features(data_loader_train, model, device, log_writer=train_writer)
-    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None)
+    generate_features(data_loader_train, model, device, log_writer=train_writer, ssl_feature_dir=ssl_feature_dir)
+    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None, ssl_feature_dir=ssl_feature_dir)
     # Also, let us save the vit model. We need not go through the entire process of getting the vit from autoenc everytime
     ssl_file_name = os.path.join(PROJECT_ROOT_DIR, 'output_dir', 'checkpoints', 'ssl_feat.pth')
     torch.save(model.state_dict(), ssl_file_name)
