@@ -1,10 +1,8 @@
-import os
-
 import numpy as np
 import torch
 from dotmap import DotMap
 
-from dataset.pretrain_tumor_data import build_dataset
+from dataset.brain_tumor.pretrain_tumor_data import build_dataset
 from environment_setup import PROJECT_ROOT_DIR
 from model.model_factory import get_models
 

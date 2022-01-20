@@ -2,7 +2,7 @@ import argparse
 import math
 import os
 
-from utils.used_metrics import find_vals, roc_auc
+from utils.used_metrics import roc_auc
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
@@ -13,7 +13,7 @@ import numpy as np
 import torch
 from torch.backends import cudnn
 
-from dataset.pretrain_tumor_data import build_dataset
+from dataset.brain_tumor.pretrain_tumor_data import build_dataset
 from model.model_utils.vit_helpers import interpolate_pos_embed
 
 from model.model_factory import get_models

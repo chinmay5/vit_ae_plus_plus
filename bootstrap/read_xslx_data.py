@@ -20,10 +20,10 @@ os.makedirs(SAVE_PATH, exist_ok=True)
 os.makedirs(SPLIT_SAVE_FILE_PATH, exist_ok=True)
 os.makedirs(RADIOMICS_SAVE_FILE_PATH, exist_ok=True)
 
-required_cols = ['Patient ID', 'Mol Subtype']
+required_cols = ['Patient ID', 'Lymphadenopathy or Suspicious Nodes']
 converters = {
     'Patient ID': str,
-    'Mol Subtype': int
+    'Lymphadenopathy or Suspicious Nodes': int
 }
 
 
@@ -149,9 +149,16 @@ def save_radiomics_data():
                        index_col=0)
     radiomics_features_dict = {}
     for scan_name in tqdm(df.index):
-        radiomics_features_dict[scan_name] = df.loc[scan_name]
+        radiomics_features_dict[scan_name] = df.loc[scan_name].values
     pickle.dump(radiomics_features_dict, open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'radiomics_all.pkl'), 'wb'))
 
+def pruge_nan_rows(feat_arr, labels_arr):
+    # We should remove both feature and label entries for nan
+    print(f"Original sizes are: features: {feat_arr.shape} and labels {labels_arr.shape}")
+    nan_indices = np.isnan(feat_arr).any(axis=1)
+    feat_arr, labels_arr = feat_arr[~nan_indices], labels_arr[~nan_indices]
+    print(f"Sizes after purging features: {feat_arr.shape} and labels {labels_arr.shape}")
+    return feat_arr, labels_arr
 
 def train_val_radiomics_feat():
     labels_dict = read_radiomics_labels()
@@ -183,6 +190,10 @@ def train_val_radiomics_feat():
         test_numpy_labels.append(labels_dict[idx])
     test_numpy_feat = np.stack(test_numpy_feat)
     test_numpy_labels = np.stack(test_numpy_labels)
+    # Purge the nan entries
+    train_numpy_feat, train_numpy_labels = pruge_nan_rows(feat_arr=train_numpy_feat, labels_arr=train_numpy_labels)
+    val_numpy_feat, val_numpy_labels = pruge_nan_rows(feat_arr=val_numpy_feat, labels_arr=val_numpy_labels)
+    test_numpy_feat, test_numpy_labels = pruge_nan_rows(feat_arr=test_numpy_feat, labels_arr=test_numpy_labels)
     # Now save all these scans
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_feat.npy'), train_numpy_feat)
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_labels.npy'), train_numpy_labels)

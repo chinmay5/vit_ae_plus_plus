@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from torch.backends import cudnn
 
-from dataset.pretrain_tumor_data import FlairData
+from dataset.brain_tumor.pretrain_tumor_data import FlairData
 from utils import misc, lr_sched
 
 from model.model_factory import get_models
