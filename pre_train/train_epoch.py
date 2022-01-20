@@ -147,7 +147,7 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--dataset', default='brats', type=str,
+    parser.add_argument('--dataset', default='breast_cancer', type=str,
                         help='dataset name')
 
     parser.add_argument('--output_dir', default='output_dir',
