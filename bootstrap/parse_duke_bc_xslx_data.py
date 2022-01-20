@@ -47,6 +47,13 @@ filename_filter_keys = ['Ph1', 'Ph2', 'Ph3', 'Ph4', 't1', 'T1']
 
 
 def process_one_dimension(dimension_x, min_x, max_x, index=0):
+    """
+    :param dimension_x: Indicates the extent of the given tumor in single dimension
+    :param min_x: max value of coordinate
+    :param max_x: min value of coordinate
+    :param index: axis we are talking about, [x,y,z]
+    :return: min_val, max_val: The cropping dimensions
+    """
     desired_shape_extent = DESIRED_SHAPE[index]
     mid_x = (max_x + min_x) // 2
     if dimension_x < desired_shape_extent:
@@ -56,7 +63,7 @@ def process_one_dimension(dimension_x, min_x, max_x, index=0):
         return min_val, max_val
     else:
         print("Tumor extent is big. Starting from the top and taking the max value")
-        return max_x, max_x - desired_shape_extent
+        return max_x - desired_shape_extent, max_x
 
 
 def obtain_tumor_dims(start_row, end_row, start_col, end_col, start_slice, end_slice):
@@ -75,11 +82,14 @@ def read_dicoms_as_np_array(dicom_files, dicom_location):
     return np.stack(combined_arr)
 
 
-def select_file(scan_name):
+def select_file(scan_name, include_pre=False):
     folder_path = os.path.join(MRI_IMG_DIR, scan_name, '*', '*')
     all_files = glob.glob(folder_path)
-    removal_vals = [x for x in all_files for skip_tag in filename_filter_keys if skip_tag in x]
-    selected_folder = [x for x in all_files if x not in removal_vals]
+    if not include_pre:
+        removal_vals = [x for x in all_files for skip_tag in filename_filter_keys if skip_tag in x]
+        selected_folder = [x for x in all_files if x not in removal_vals]
+    else:
+        selected_folder = [x for x in all_files if 'pre' in x]
     if len(selected_folder) != 1:
         bad_files.append(scan_name)
         raise AttributeError("Multiple candidate files. Please check scan_type criterion.")
@@ -91,7 +101,15 @@ def select_file(scan_name):
     return scan
 
 
-def process_single_scan(scan_name, triage=True):
+def sanity_check_fur_scan_shapes():
+    """
+    Method to make sure that all the scans are of the shape 96, 96, 96
+    :return: None
+    """
+    for item in os.listdir(SAVE_PATH):
+        assert np.all(np.load(os.path.join(SAVE_PATH, item)).shape == np.array([96, 96, 96])), f"Invalid shape for {item}"
+
+def process_single_scan(scan_name, triage=True, include_pre=False):
     row_begin, row_end, col_begin, col_end, slice_begin, slice_end = df.loc[scan_name]
     row_begin, row_end, col_begin, col_end, slice_begin, slice_end = obtain_tumor_dims(start_row=row_begin,
                                                                                        end_row=row_end,
@@ -100,12 +118,22 @@ def process_single_scan(scan_name, triage=True):
                                                                                        start_slice=slice_begin,
                                                                                        end_slice=slice_end)
 
-    mri_scan = select_file(scan_name=scan_name)
+    mri_scan = select_file(scan_name=scan_name, include_pre=include_pre)
+    x_dim, y_dim, z_dim = mri_scan.shape
     cropped_scan = mri_scan[slice_begin:slice_end, row_begin:row_end, col_begin:col_end]
+    print(cropped_scan.shape)
+    if slice_end > x_dim:
+        pad_length_x = slice_end - x_dim
+        cropped_scan = np.pad(cropped_scan, [(0, pad_length_x), (0, 0), (0, 0)])
+    if cropped_scan.shape[0] != 96:
+        pad_length_x = 96 - cropped_scan.shape[0]
+        cropped_scan = np.pad(cropped_scan, [(0, pad_length_x), (0, 0), (0, 0)])
+    # assert slice_end <= x_dim and row_end <= y_dim and col_end < z_dim, f"Something wrong with the orientation for {scan_name} with {slice_end, row_end, col_end} while its shape is {mri_scan.shape}"
+    assert np.all(cropped_scan.shape == np.array([96, 96, 96])), f"Something wrong with the orientation for {scan_name} with begin {slice_begin, row_begin, col_begin} end {slice_end, row_end, col_end} while its shape is {mri_scan.shape} and crop shape {cropped_scan.shape}"
     if triage:
         print(cropped_scan.shape)
         return
-    np.save(os.path.join(SAVE_PATH, scan_name), cropped_scan)
+    np.save(os.path.join(SAVE_PATH, scan_name), cropped_scan.astype(np.float))
 
 
 def process_all_scans():
@@ -114,14 +142,19 @@ def process_all_scans():
             process_single_scan(scan_name=scan, triage=False)
         except AttributeError as e:
             print(f"Scan :- {scan} is bad!!!")
-        print("continuing")
+    pickle.dump(bad_files, open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'wb'))
 
 
 def handle_bad_files_from_first_round():
+    """
+    Many files have only the prefix "pre" in their name and not phases. We handle such scans in this round.
+    :return:
+    """
+    print("Handling the remaining examples from the first round")
     bad_files = pickle.load(open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'rb'))
     for scan in tqdm(bad_files):
         try:
-            process_single_scan(scan_name=scan, triage=False)
+            process_single_scan(scan_name=scan, triage=False, include_pre=True)
         except AttributeError as e:
             print(f"Scan :- {scan} is bad!!!")
 
@@ -171,29 +204,23 @@ def train_val_radiomics_feat():
     val_split_indices = [x[:x.find('.npy')] for x in val_split_indices]
     test_split_indices = [x[:x.find('.npy')] for x in test_split_indices]
     # Now we store values in an array
-    train_numpy_feat, val_numpy_feat, test_numpy_feat = [], [], []
-    train_numpy_labels, val_numpy_labels, test_numpy_labels = [], [], []
-    for idx in train_split_indices:
-        train_numpy_feat.append(radiomics_features_dict[idx])
-        train_numpy_labels.append(labels_dict[idx])
-    train_numpy_feat = np.stack(train_numpy_feat)
-    train_numpy_labels = np.stack(train_numpy_labels)
+    # Let us remove all the indices that can lead to nan values in its shape
+    train_numpy_feat, train_numpy_labels, train_surviving_indices = purge_nans(labels_dict=labels_dict,
+                                                                               radiomics_features_dict=radiomics_features_dict,
+                                                                               split_indices=train_split_indices)
     # Similarly for the validation elements
-    for idx in val_split_indices:
-        val_numpy_feat.append(radiomics_features_dict[idx])
-        val_numpy_labels.append(labels_dict[idx])
-    val_numpy_feat = np.stack(val_numpy_feat)
-    val_numpy_labels = np.stack(val_numpy_labels)
-    # Finally for the test set
-    for idx in test_split_indices:
-        test_numpy_feat.append(radiomics_features_dict[idx])
-        test_numpy_labels.append(labels_dict[idx])
-    test_numpy_feat = np.stack(test_numpy_feat)
-    test_numpy_labels = np.stack(test_numpy_labels)
+    val_numpy_feat, val_numpy_labels, val_surviving_indices = purge_nans(labels_dict=labels_dict,
+                                                                               radiomics_features_dict=radiomics_features_dict,
+                                                                               split_indices=val_split_indices)
+    # Similarly for the test elements
+    test_numpy_feat, test_numpy_labels, test_surviving_indices = purge_nans(labels_dict=labels_dict,
+                                                                         radiomics_features_dict=radiomics_features_dict,
+                                                                         split_indices=test_split_indices)
+    # Old code block. Hopefully, task already taken care of
     # Purge the nan entries
-    train_numpy_feat, train_numpy_labels = pruge_nan_rows(feat_arr=train_numpy_feat, labels_arr=train_numpy_labels)
-    val_numpy_feat, val_numpy_labels = pruge_nan_rows(feat_arr=val_numpy_feat, labels_arr=val_numpy_labels)
-    test_numpy_feat, test_numpy_labels = pruge_nan_rows(feat_arr=test_numpy_feat, labels_arr=test_numpy_labels)
+    # train_numpy_feat, train_numpy_labels = pruge_nan_rows(feat_arr=train_numpy_feat, labels_arr=train_numpy_labels)
+    # val_numpy_feat, val_numpy_labels = pruge_nan_rows(feat_arr=val_numpy_feat, labels_arr=val_numpy_labels)
+    # test_numpy_feat, test_numpy_labels = pruge_nan_rows(feat_arr=test_numpy_feat, labels_arr=test_numpy_labels)
     # Now save all these scans
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_feat.npy'), train_numpy_feat)
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_labels.npy'), train_numpy_labels)
@@ -201,6 +228,29 @@ def train_val_radiomics_feat():
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'val_labels.npy'), val_numpy_labels)
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_feat.npy'), test_numpy_feat)
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'), test_numpy_labels)
+    # Also store the labels dictionary since it would make our lives easier
+    pickle.dump(labels_dict, open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'labels_dict.npy'),'wb'))
+    # Finally, let us also update the label indices since we want to have the same consistant ones across radiomics
+    # and SSL
+    pickle.dump(train_surviving_indices, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'train.pkl'), 'wb'))
+    pickle.dump(val_surviving_indices, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'val.pkl'), 'wb'))
+    pickle.dump(test_surviving_indices, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'test.pkl'), 'wb'))
+
+
+def purge_nans(labels_dict, radiomics_features_dict, split_indices):
+    numpy_feat = []
+    numpy_labels = []
+    surviving_indices = []
+    for idx in split_indices:
+        features = radiomics_features_dict[idx]
+        if np.any(np.isnan(features)):
+            continue
+        surviving_indices.append(idx)
+        numpy_feat.append(radiomics_features_dict[idx])
+        numpy_labels.append(labels_dict[idx])
+    numpy_feat = np.stack(numpy_feat)
+    numpy_labels = np.stack(numpy_labels)
+    return numpy_feat, numpy_labels, surviving_indices
 
 
 def train_val_test_splits():
@@ -223,14 +273,20 @@ def train_val_test_splits():
     pickle.dump(test_split, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'test.pkl'), 'wb'))
 
 
+def bootstrap_setup():
+    train_val_test_splits()
+    save_radiomics_data()
+    train_val_radiomics_feat()
+
+
 if __name__ == '__main__':
     # tumor_data_file = os.path.join(META_DATA_DIR, 'Clinical_and_Other_Features.xlsx')
     # read_file(tumor_data_file)
-    # process_all_scans()
+    process_all_scans()
+    handle_bad_files_from_first_round()
+    sanity_check_fur_scan_shapes()
     # process_single_scan(scan_name='Breast_MRI_001', triage=False)
     # pickle.dump(bad_files, open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'wb'))
-    # handle_bad_files_from_first_round()
+
     # pickle.dump(bad_files, open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'wb'))
-    # train_val_test_splits()
-    save_radiomics_data()
-    train_val_radiomics_feat()
+    bootstrap_setup()
