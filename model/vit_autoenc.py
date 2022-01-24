@@ -51,6 +51,11 @@ class MaskedAutoencoderViT(nn.Module):
 
         self.decoder_norm = norm_layer(decoder_embed_dim)
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size ** 3 * in_chans, bias=True)  # encoder to decoder
+        # self.decoder_pred = nn.Sequential(
+        #     nn.Linear(decoder_embed_dim, patch_size ** 3 * in_chans, bias=True),
+        #     nn.Tanh()# encoder to decoder
+        # )
+
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
@@ -206,10 +211,17 @@ class MaskedAutoencoderViT(nn.Module):
             var = target.var(dim=-1, keepdim=True)
             target = (target - mean) / (var + 1.e-6) ** .5
 
+        # loss = self.get_weighted_loss(pred, target)
         loss = (pred - target) ** 2
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
 
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        return loss
+
+    def get_weighted_loss(self, pred, target):
+        # Majority of the voxel locations are of black color and hence, gt < 0 ~ 90%. We need to reweigh the loss
+        weighting_factor = 9 * (target >= 0) + 1  # B, C, L, H, W
+        loss = weighting_factor * ((pred - target) ** 2)
         return loss
 
     def forward(self, imgs, mask_ratio=0.75):

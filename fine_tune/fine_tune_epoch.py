@@ -5,7 +5,7 @@ import os
 from dataset.dataset_factory import get_dataset
 from utils.used_metrics import roc_auc
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import sys
 from pathlib import Path
@@ -102,7 +102,8 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 
 @torch.no_grad()
 def evaluate(data_loader, model, device):
-    criterion = torch.nn.CrossEntropyLoss()
+    # Weights for breast_tumor = 2:1 majority being label 0
+    criterion = torch.nn.CrossEntropyLoss(weight=torch.as_tensor([4, 1], dtype=torch.float).to(device))
 
     metric_logger = misc.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -216,10 +217,10 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-380.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-80.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
-    # parser.set_defaults(global_pool=True)
+    parser.set_defaults(global_pool=True)
     parser.add_argument('--cls_token', action='store_false', dest='global_pool',
                         help='Use class token instead of global pool for classification')
 
@@ -229,9 +230,9 @@ def get_args_parser():
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
 
-    parser.add_argument('--output_dir', default='./output_dir',
+    parser.add_argument('--output_dir', default='finetune_dir',
                         help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='./output_dir',
+    parser.add_argument('--log_dir', default='finetune_dir',
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -249,6 +250,7 @@ def get_args_parser():
     parser.add_argument('--pin_mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
+
     parser.set_defaults(pin_mem=True)
 
     # distributed training parameters
@@ -285,8 +287,9 @@ def main(args):
         tio.RandomGamma(log_gamma=(-0.3, 0.3))
     ]
     train_transforms = tio.Compose(transforms)
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms)
-    dataset_val = get_dataset(dataset_name=args.dataset, mode='valid', args=args, transforms=None)
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms, use_z_score=True)
+    dataset_val = get_dataset(dataset_name=args.dataset, mode='valid', args=args, transforms=None, use_z_score=True)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None, use_z_score=True)
 
     if False:  # args.distributed:
         num_tasks = misc.get_world_size()
@@ -308,8 +311,10 @@ def main(args):
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        sampler_test = torch.utils.data.SequentialSampler(dataset_test)
 
     if args.log_dir is not None and not args.eval:
+        args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
         os.makedirs(args.log_dir, exist_ok=True)
         log_writer = SummaryWriter(log_dir=args.log_dir)
     else:
@@ -325,6 +330,14 @@ def main(args):
 
     data_loader_val = torch.utils.data.DataLoader(
         dataset_val, sampler=sampler_val,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=False
+    )
+
+    data_loader_test = torch.utils.data.DataLoader(
+        dataset_test, sampler=sampler_test,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
@@ -367,6 +380,12 @@ def main(args):
             assert set(msg.missing_keys) == {'head.weight', 'head.bias'}
 
         # manually initialize fc layer
+        # Let us fix the initial layers of the network such that only the classification head is fine tuned
+        for name, child in model.named_children():
+            if name == 'head':
+                continue
+            for param in child.parameters():
+                param.requires_grad = False
         torch.nn.init.trunc_normal_(model.head.weight, std=2e-5)
 
     model.to(device)
@@ -406,16 +425,21 @@ def main(args):
     elif args.smoothing > 0.:
         criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     else:
-        criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([3.0, 1.0]).to(device))  # Label 1 occurs ~3 times more than 0
-        # criterion = torch.nn.BCEWithLogitsLoss()
+        # criterion = torch.nn.CrossEntropyLoss()  # Label 1 occurs ~3 times more than 0
+        print("Default case criterion")
+        criterion = torch.nn.CrossEntropyLoss(weight=torch.as_tensor([4, 1], dtype=torch.float).to(device))
+        # criterion = torch.nn.BCEWithLogitsLoss()list_val = [dataset_train[idx][1].item() for idx in range(len(dataset_tra
 
     print("criterion = %s" % str(criterion))
 
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
+    # Align the generated folders with our structure
+    if args.output_dir:
+        args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir)
 
     if args.eval:
-        test_stats = evaluate(data_loader_val, model, device)
-        print(f"Accuracy of the network on the {len(dataset_val)} test images: {test_stats['acc1']:.1f}%")
+        test_stats = evaluate(data_loader_test, model, device)
+        print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
         exit(0)
 
     print(f"Start training for {args.epochs} epochs")
@@ -431,27 +455,26 @@ def main(args):
             log_writer=log_writer,
             args=args
         )
-        if args.output_dir:
+        val_stats = evaluate(data_loader_val, model, device)
+        print(f"ROC_AUC score of the network on the {len(dataset_val)} val images: {val_stats['roc_auc_score']:.1f}%")
+
+        if val_stats["roc_auc_score"] > max_roc_auc_score:
+            max_roc_auc_score = val_stats["roc_auc_score"]
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                loss_scaler=loss_scaler, epoch=epoch)
-
-        test_stats = evaluate(data_loader_val, model, device)
-        print(f"ROC_AUC score of the network on the {len(dataset_val)} test images: {test_stats['roc_auc_score']:.1f}%")
-        max_roc_auc_score = max(max_roc_auc_score, test_stats["roc_auc_score"])
+                loss_scaler=loss_scaler, epoch='best_ft_model')  # A little hack for saving model with preferred name
         print(f'Max accuracy: {max_roc_auc_score:.2f}%')
 
         if log_writer is not None:
-            log_writer.add_scalar('perf/test_roc_auc_score', test_stats['roc_auc_score'], epoch)
-            # log_writer.add_scalar('perf/test_acc5', test_stats['acc5'], epoch)
-            log_writer.add_scalar('perf/test_loss', test_stats['loss'], epoch)
+            log_writer.add_scalar('perf/val_roc_auc_score', val_stats['roc_auc_score'], epoch)
+            log_writer.add_scalar('perf/val_loss', val_stats['loss'], epoch)
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     **{f'test_{k}': v for k, v in test_stats.items()},
+                     **{f'val_{k}': v for k, v in val_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
 
-        if args.output_dir and misc.is_main_process():
+        if misc.is_main_process():
             if log_writer is not None:
                 log_writer.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
@@ -460,6 +483,12 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+    # Now, let us load the best model and evaluate
+    checkpoint = torch.load(os.path.join(args.output_dir, 'checkpoint-best_ft_model.pth'), map_location='cpu')
+    model.load_state_dict(checkpoint['model'])
+    test_stats = evaluate(data_loader=data_loader_test, model=model, device=device)
+    print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
+
 
 
 if __name__ == '__main__':

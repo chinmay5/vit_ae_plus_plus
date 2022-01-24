@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 from dataset.dataset_factory import get_dataset
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import numpy as np
 import torch
@@ -20,11 +20,12 @@ from model.model_utils.vit_helpers import interpolate_pos_embed
 
 
 @torch.no_grad()
-def generate_features(data_loader, model, device, ssl_feature_dir, feature_file_name='features.npy', label_file_name='gt_labels.npy', log_writer=None):
+def check_reconstruction(data_loader, model, device,log_writer=None):
     # switch to evaluation mode
     model.eval()
     outGT = torch.FloatTensor().to(device)
     outPRED = torch.FloatTensor().to(device)
+    input_img = torch.FloatTensor().to(device)
     for batch in tqdm(data_loader):
         images = batch[0]
         target = batch[-1]
@@ -33,18 +34,22 @@ def generate_features(data_loader, model, device, ssl_feature_dir, feature_file_
 
         # compute output
         with torch.cuda.amp.autocast():
-            output = model.forward_features(images)
+            _,output,_ = model(images)
+            output = model.unpatchify(output)
+            print(f"\nThe pred fraction is {(output > 0).sum()/(output.size(0)* 96*96*96)}")
+            print(f"\nThe gt fraction is {(images > 0).sum()/(images.size(0)* 96*96*96)}")
         outPRED = torch.cat((outPRED, output), 0)
         outGT = torch.cat((outGT, target), 0)
-    if feature_file_name is not None:
-        print("Saving features!!!")
-        np.save(os.path.join(ssl_feature_dir, feature_file_name), outPRED.cpu().numpy())
-    if label_file_name is not None:
-        print("Saving labels!!!")
-        np.save(os.path.join(ssl_feature_dir, label_file_name), outGT.cpu().numpy())
+        input_img = torch.cat((input_img, images), 0)
     if log_writer is not None:
-        metadata = [x.item() for x in outGT]
-        log_writer.add_embedding(outPRED, metadata=metadata, tag='ssl_embedding')
+        gt_img = input_img[0].squeeze_().unsqueeze(1)
+        output = outPRED[0].squeeze_().unsqueeze(1)
+        print(gt_img.max())
+        print(gt_img.min())
+        img_seq = (output + 1)/2  * 255# between 0 and 1
+        gt_img = (gt_img + 1)/2  * 255# between 0 and 1
+        log_writer.add_images(tag='feat_set', img_tensor=output)
+        log_writer.add_images(tag='input_img', img_tensor=gt_img)
 
 
 def get_args_parser():
@@ -67,7 +72,7 @@ def get_args_parser():
                         help='Patch size for dividing the input')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-60.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-120.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
     # parser.set_defaults(global_pool=True)
@@ -114,8 +119,8 @@ def main(args):
     cudnn.benchmark = True
 
 
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='feat_extract', args=args, use_z_score=True)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, use_z_score=True)
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, use_z_score=True)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='val', args=args, use_z_score=True)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir')
@@ -139,7 +144,7 @@ def main(args):
         drop_last=False,
     )
 
-    model = get_models(model_name='vit', args=args)
+    model = get_models(model_name='autoenc', args=args)
     args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
     train_writer = SummaryWriter(args.log_dir)
 
@@ -149,12 +154,6 @@ def main(args):
 
         print("Load pre-trained checkpoint from: %s" % args.finetune)
         checkpoint_model = checkpoint['model']
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
         # interpolate position embedding
         interpolate_pos_embed(model, checkpoint_model)
 
@@ -169,8 +168,8 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    generate_features(data_loader_train, model, device, log_writer=train_writer, ssl_feature_dir=ssl_feature_dir)
-    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None, ssl_feature_dir=ssl_feature_dir)
+    check_reconstruction(data_loader_train, model, device, log_writer=train_writer)
+    check_reconstruction(data_loader_test, model, device)
     # Also, let us save the vit model. We need not go through the entire process of getting the vit from autoenc everytime
     ssl_file_name = os.path.join(PROJECT_ROOT_DIR, 'output_dir', 'checkpoints', 'ssl_feat.pth')
     torch.save(model.state_dict(), ssl_file_name)

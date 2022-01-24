@@ -3,6 +3,7 @@ import pickle
 
 import numpy as np
 import torch
+from torch import sqrt
 from torch.utils.data import Dataset
 import torchio as tio
 
@@ -14,16 +15,20 @@ RADIOMICS_SAVE_FILE_PATH = os.path.join(BASE_PATH, 'radiomics_feat')
 
 
 class FlairData(Dataset):
-    def __init__(self, mode, transform=None):
+    def __init__(self, mode, transform=None, use_z_score=False):
         super(FlairData).__init__()
         self.filenames = self.load_index(mode)
         self.labels_dict = pickle.load(open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'labels_dict.npy'), 'rb'))
         self.transform = transform
+        self.use_z_score= use_z_score
 
     def __len__(self):
         return len(self.filenames)
 
     def _normalize_data(self, volume):
+        if self.use_z_score:
+            # Since this is a single channel image so, we can ignore the `axis` parameter
+            return (volume - volume.mean()) / sqrt(volume.var())
         max_val, min_val = volume.max(), volume.min()
         volume = (volume - min_val)/ (max_val - min_val)
         return 2 * volume - 1  # Range of values [1, -1]
@@ -60,9 +65,9 @@ class FlairData(Dataset):
             return test_split_indices
 
 
-def build_dataset(mode, args=None, transforms=None):
+def build_dataset(mode, args=None, transforms=None, use_z_score=False):
     assert mode in ['train', 'valid', 'test', 'feat_extract'], "Invalid Mode selected"
-    return FlairData(mode=mode, transform=transforms)
+    return FlairData(mode=mode, transform=transforms, use_z_score=use_z_score)
 
 
 

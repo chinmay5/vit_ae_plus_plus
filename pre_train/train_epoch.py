@@ -147,7 +147,7 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--dataset', default='breast_cancer', type=str,
+    parser.add_argument('--dataset', default='brats', type=str,
                         help='dataset name')
 
     parser.add_argument('--output_dir', default='output_dir',
@@ -198,12 +198,13 @@ def main(args):
     # TODO: Put argument values.
     transforms = [
         tio.RandomAffine(),
-        tio.RandomBlur(),
-        tio.RandomNoise(std=0.5),
+        # tio.RandomBlur(),
+        tio.RandomNoise(std=0.1),
         tio.RandomGamma(log_gamma=(-0.3, 0.3))
     ]
     transformations = tio.Compose(transforms)
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='feat_extract', args=args, transforms=transformations)
+    # TODO: Evaluate the effects better
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=transformations, use_z_score=True)
     print(dataset_train)
 
     if False:  # args.distributed:

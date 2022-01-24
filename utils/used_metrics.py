@@ -8,11 +8,13 @@ enc = OneHotEncoder()
 possible_labels = np.array([0, 1]).reshape(-1, 1)
 enc.fit(possible_labels)
 
+
 def roc_auc(predictions, target):
     # Converting raw scores into probabilities
+    find_vals(predictions, target)
     predictions = torch.softmax(predictions, dim=1)
     predictions, target = predictions.cpu().numpy(), target.cpu().numpy()
-    target_one_hot = enc.transform(target.reshape(-1, 1)).toarray() # Reshaping needed by the library
+    target_one_hot = enc.transform(target.reshape(-1, 1)).toarray()  # Reshaping needed by the library
     # Arguments take 'GT' before taking 'predictions'
     return roc_auc_score(target_one_hot, predictions)
 

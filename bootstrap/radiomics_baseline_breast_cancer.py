@@ -121,7 +121,35 @@ print('Radiomics alone:')
 print('specificity:', specificity)
 sensitivity = cm[1, 1] / (cm[1, 1] + cm[0, 1])
 print('sensitivity:', sensitivity)
+#############################################################################################################
 
+# Bran's SSL features
+print("THIS IS BRAN'S CODE IN ACTION!!!!!!!!!!!!!!!!!!")
+train_X_vit = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'iter_3000_breast_training.npy'))
+test_X_vit = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'iter_3000_breast_test.npy'))
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
+    test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_vit, train_label=train_numpy_labels, test_features=test_X_vit)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+print("SWITCHING TO MY CODE!!!!!!!!!")
 
 # TODO: Maybe include the plotting etc later
 ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'breast_cancer', 'ssl_features_dir')

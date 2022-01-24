@@ -21,7 +21,7 @@ def prepare_model():
     args.nb_classes = 2
     args.patch_size = 8
     args.model = 'mae_vit_base_patch16'
-    args.finetune = os.path.join(PROJECT_ROOT_DIR, 'output_dir', 'checkpoints', 'checkpoint-380.pth')
+    args.finetune = os.path.join(PROJECT_ROOT_DIR, 'output_dir', 'checkpoints', 'checkpoint-60.pth')
 
     model = get_models(model_name='autoenc', args=args)
     # load model
@@ -35,7 +35,7 @@ def prepare_model():
 
 
 def viz_one_patch(model):
-    dataset_test = build_dataset(mode='test')
+    dataset_test = build_dataset(mode='test', use_z_score=True)
     x, _ = dataset_test[0]
     x.unsqueeze_(0)  # Adding the batch dimension
     # make it a batch-like

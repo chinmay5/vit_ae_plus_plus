@@ -157,7 +157,7 @@ class VisionTransformer3D(nn.Module):
     def __init__(self, volume_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
                  num_heads=12, mlp_ratio=4., qkv_bias=True, representation_size=None, distilled=False,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=PatchEmbed3D, norm_layer=None,
-                 act_layer=None, weight_init=''):
+                 act_layer=None, weight_init='', global_pool=False):
         """
         Args:
             volume_size (int, triad): input image size
@@ -215,6 +215,10 @@ class VisionTransformer3D(nn.Module):
         # Classifier head(s)
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
         self.head_dist = None
+        self.global_pool = global_pool
+        if self.global_pool:
+            self.fc_norm = norm_layer(embed_dim)
+            del self.norm  # remove the original norm
         if distilled:
             self.head_dist = nn.Linear(self.embed_dim, self.num_classes) if num_classes > 0 else nn.Identity()
 
@@ -258,19 +262,25 @@ class VisionTransformer3D(nn.Module):
             self.head_dist = nn.Linear(self.embed_dim, self.num_classes) if num_classes > 0 else nn.Identity()
 
     def forward_features(self, x):
+        B = x.shape[0]
         x = self.patch_embed(x)
-        cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
-        if self.dist_token is None:
-            x = torch.cat((cls_token, x), dim=1)
+
+        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        x = torch.cat((cls_tokens, x), dim=1)
+        x = x + self.pos_embed
+        x = self.pos_drop(x)
+
+        for blk in self.blocks:
+            x = blk(x)
+
+        if self.global_pool:
+            x = x[:, 1:, :].mean(dim=1)  # global pool without cls token
+            outcome = self.fc_norm(x)
         else:
-            x = torch.cat((cls_token, self.dist_token.expand(x.shape[0], -1, -1), x), dim=1)
-        x = self.pos_drop(x + self.pos_embed)
-        x = self.blocks(x)
-        x = self.norm(x)
-        if self.dist_token is None:
-            return self.pre_logits(x[:, 0])
-        else:
-            return x[:, 0], x[:, 1]
+            x = self.norm(x)
+            outcome = x[:, 0]
+
+        return outcome
 
     def forward(self, x):
         x = self.forward_features(x)
@@ -284,160 +294,6 @@ class VisionTransformer3D(nn.Module):
         else:
             x = self.head(x)
         return x
-
-
-
-
-
-# class Embeddings(nn.Module):
-#     """Construct the embeddings from patch, position embeddings.
-#     """
-#
-#     def __init__(self, img_size, in_channels, hidden_size=252, down_factor=2, patch_size=(8, 8, 8), dropout_embed=0.1):
-#         super(Embeddings, self).__init__()
-#         n_patches = int((img_size[0] // patch_size[0]) * (img_size[1] // patch_size[1]) * (img_size[2]// patch_size[2])) + 1 # One more for CLS token
-#         self.patch_embeddings = nn.Conv3d(in_channels=in_channels,
-#                                           out_channels=hidden_size,
-#                                           kernel_size=patch_size,
-#                                           stride=patch_size)
-#         self.position_embeddings = nn.Parameter(torch.zeros(1, n_patches, hidden_size))
-#         self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_size))
-#         self.dropout = nn.Dropout(dropout_embed)
-#
-#     def forward(self, x):
-#         x = self.patch_embeddings(x)  # (B, hidden. n_patches^(1/2), n_patches^(1/2))
-#         x = x.flatten(2)
-#         x = x.transpose(-1, -2)  # (B, n_patches, hidden)
-#         b, n, _ = x.shape
-#
-#         cls_tokens = repeat(self.cls_token, '() n d -> b n d', b=b)
-#         x = torch.cat((cls_tokens, x), dim=1)
-#         embeddings = x + self.position_embeddings
-#         embeddings = self.dropout(embeddings)
-#
-#         return embeddings
-
-
-# class Block(nn.Module):
-#     def __init__(self, hidden_size=252, vis=False, mlp_dim=3072, mlp_dropout=0.1, num_heads=12, dropout_attn=0.):
-#         super(Block, self).__init__()
-#         self.hidden_size = hidden_size
-#         self.attention_norm = nn.LayerNorm(hidden_size, eps=1e-6)
-#         self.ffn_norm = nn.LayerNorm(hidden_size, eps=1e-6)
-#         self.ffn = Mlp(hidden_size=hidden_size, mlp_dim=mlp_dim, mlp_dropout=mlp_dropout)
-#         self.attn = Attention(num_heads, hidden_size=hidden_size, dropout_p=dropout_attn, vis=vis)
-#
-#     def forward(self, x):
-#         h = x
-#
-#         x = self.attention_norm(x)
-#         x, weights = self.attn(x)
-#         x = x + h
-#
-#         h = x
-#         x = self.ffn_norm(x)
-#         x = self.ffn(x)
-#         x = x + h
-#         return x, weights
-
-
-# class Encoder(nn.Module):
-#     def __init__(self, hidden_size, num_layers=12, vis=False, mlp_dim=3072, mlp_dropout=0.1, num_heads=12,
-#                  dropout_attn=0.):
-#         super(Encoder, self).__init__()
-#         self.vis = vis
-#         self.layer = nn.ModuleList()
-#         self.encoder_norm = nn.LayerNorm(hidden_size, eps=1e-6)
-#         for _ in range(num_layers):
-#             layer = Block(hidden_size=hidden_size, vis=vis, mlp_dim=mlp_dim, mlp_dropout=mlp_dropout,
-#                           num_heads=num_heads, dropout_attn=dropout_attn)
-#             self.layer.append(copy.deepcopy(layer))
-#
-#     def forward(self, hidden_states):
-#         attn_weights = []
-#         for layer_block in self.layer:
-#             hidden_states, weights = layer_block(hidden_states)
-#             if self.vis:
-#                 attn_weights.append(weights)
-#         encoded = self.encoder_norm(hidden_states)
-#         return encoded, attn_weights
-
-
-# class Transformer(nn.Module):
-#     def __init__(self, img_size, in_channels, hidden_size=252, down_factor=2, patch_size=(8, 8, 8), mlp_dropout=0.1,
-#                  num_layers=12, mlp_dim=3072, num_heads=12, dropout_embed=0., dropout_attn=0., vis=False):
-#         super(Transformer, self).__init__()
-#         self.embeddings = Embeddings(img_size=img_size, in_channels=in_channels, hidden_size=hidden_size,
-#                                      down_factor=down_factor, patch_size=patch_size, dropout_embed=dropout_embed)
-#         self.encoder = Encoder(hidden_size=hidden_size, num_layers=num_layers, mlp_dim=mlp_dim, mlp_dropout=mlp_dropout,
-#                                num_heads=num_heads,
-#                                dropout_attn=dropout_attn, vis=vis)
-#
-#     def forward(self, input_ids):
-#         embedding_output = self.embeddings(input_ids)
-#         encoded, attn_weights = self.encoder(embedding_output)  # (B, n_patch, hidden)
-#         return encoded, attn_weights
-
-
-# class Conv3dReLU(nn.Sequential):
-#     def __init__(
-#             self,
-#             in_channels,
-#             out_channels,
-#             kernel_size,
-#             padding=0,
-#             stride=1,
-#             use_batchnorm=True,
-#     ):
-#         conv = nn.Conv3d(
-#             in_channels,
-#             out_channels,
-#             kernel_size,
-#             stride=stride,
-#             padding=padding,
-#             bias=not (use_batchnorm),
-#         )
-#         relu = nn.ReLU(inplace=True)
-#
-#         bn = nn.BatchNorm3d(out_channels)
-#
-#         super(Conv3dReLU, self).__init__(conv, bn, relu)
-
-
-# def traid(t):
-#     return t if isinstance(t, tuple) else (t, t, t)
-
-
-# class ViT(nn.Module):
-#     def __init__(self, image_size, num_classes, in_channels, pool='cls', channels=3, hidden_size=252, down_factor=2,
-#                  patch_size=(8, 8, 8), mlp_dropout=0.1,
-#                  num_layers=12, mlp_dim=3072, num_heads=12, dropout_embed=0., dropout_attn=0., vis=False):
-#         super().__init__()
-#         image_height, image_width, image_depth = traid(image_size)
-#         patch_height, patch_width, patch_depth = traid(patch_size)
-#
-#         assert image_height % patch_height == 0 and image_width % patch_width == 0 and image_depth % patch_depth == 0, 'Image dimensions must be divisible by the patch size.'
-#
-#         num_patches = (image_height // patch_height) * (image_width // patch_width) * (image_depth // patch_depth)
-#         patch_dim = channels * patch_height * patch_width * patch_depth
-#         assert pool in {'cls', 'mean'}, 'pool type must be either cls (cls token) or mean (mean pooling)'
-#
-#         self.transformer = Transformer(img_size=image_size, in_channels=in_channels, hidden_size=hidden_size,
-#                                        down_factor=down_factor, patch_size=patch_size, mlp_dropout=mlp_dropout,
-#                                        num_layers=num_layers, mlp_dim=mlp_dim, num_heads=num_heads,
-#                                        dropout_embed=dropout_embed, dropout_attn=dropout_attn, vis=vis)
-#
-#         self.pool = pool
-#
-#         self.mlp_head = nn.Sequential(
-#             nn.LayerNorm(hidden_size),
-#             nn.Linear(hidden_size, num_classes)
-#         )
-#
-#     def forward(self, img):
-#         x, attn_wt = self.transformer(img)
-#         x = x.mean(dim=1) if self.pool == 'mean' else x[:, 0]
-#         return self.mlp_head(x)
 
 
 if __name__ == '__main__':
