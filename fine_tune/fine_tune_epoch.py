@@ -131,8 +131,10 @@ def evaluate(data_loader, model, device):
         metric_logger.update(loss=loss.item())
         # metric_logger.meters['specificity'].update(specificity, n=batch_size)
         # metric_logger.meters['sensitivity'].update(sensitivity, n=batch_size)
-    roc_auc_score = roc_auc(predictions=outPRED, target=outGT)
+    roc_auc_score, specificity, sensitivity = roc_auc(predictions=outPRED, target=outGT)
     metric_logger.update(roc_auc_score=roc_auc_score)
+    metric_logger.update(specificity=specificity)
+    metric_logger.update(sensitivity=sensitivity)
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print('* roc_auc_score {:.3f}, loss {losses.global_avg:.3f}'
@@ -217,7 +219,7 @@ def get_args_parser():
                         help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-80.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-399.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
     parser.set_defaults(global_pool=True)
@@ -230,9 +232,9 @@ def get_args_parser():
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
 
-    parser.add_argument('--output_dir', default='finetune_dir',
+    parser.add_argument('--output_dir', default='output_dir/finetune_dir',
                         help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='finetune_dir',
+    parser.add_argument('--log_dir', default='output_dir/finetune_dir',
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -244,6 +246,7 @@ def get_args_parser():
                         help='start epoch')
     parser.add_argument('--eval', action='store_true',
                         help='Perform evaluation only')
+    parser.set_defaults(eval=True)
     parser.add_argument('--dist_eval', action='store_true', default=False,
                         help='Enabling distributed evaluation (recommended during training for faster monitor')
     parser.add_argument('--num_workers', default=10, type=int)
@@ -344,16 +347,22 @@ def main(args):
         drop_last=False
     )
 
-    mixup_fn = None
-    mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
-    if mixup_active:
-        print("Mixup is activated!")
-        mixup_fn = Mixup(
-            mixup_alpha=args.mixup, cutmix_alpha=args.cutmix, cutmix_minmax=args.cutmix_minmax,
-            prob=args.mixup_prob, switch_prob=args.mixup_switch_prob, mode=args.mixup_mode,
-            label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     model = get_models(model_name='vit', args=args)
+
+    # Align the generated folders with our structure
+    if args.output_dir:
+        args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir)
+
+    if args.eval:
+        assert os.path.exists(os.path.join(args.output_dir, 'checkpoint-best_ft_model.pth')), "Make sure you have a fine-tuned model already"
+        # Now, let us load the best model and evaluate
+        checkpoint = torch.load(os.path.join(args.output_dir, 'checkpoint-best_ft_model.pth'), map_location='cpu')
+        model.load_state_dict(checkpoint['model'])
+        model.to(device)
+        test_stats = evaluate(data_loader_test, model, device)
+        print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
+        exit(0)
 
     if args.finetune and not args.eval:
         args.finetune = os.path.join(PROJECT_ROOT_DIR, args.finetune)
@@ -433,18 +442,11 @@ def main(args):
     print("criterion = %s" % str(criterion))
 
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
-    # Align the generated folders with our structure
-    if args.output_dir:
-        args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir)
 
-    if args.eval:
-        test_stats = evaluate(data_loader_test, model, device)
-        print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
-        exit(0)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
-    max_roc_auc_score = 0.0
+    max_spec_sen_sum = 0.0
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -457,13 +459,14 @@ def main(args):
         )
         val_stats = evaluate(data_loader_val, model, device)
         print(f"ROC_AUC score of the network on the {len(dataset_val)} val images: {val_stats['roc_auc_score']:.1f}%")
-
-        if val_stats["roc_auc_score"] > max_roc_auc_score:
-            max_roc_auc_score = val_stats["roc_auc_score"]
+        spec_sen_sum = val_stats['specificity'] + val_stats['sensitivity']
+        if spec_sen_sum > max_spec_sen_sum:
+            print(f"saving best model @ epoch {epoch}")
+            max_spec_sen_sum = spec_sen_sum
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch='best_ft_model')  # A little hack for saving model with preferred name
-        print(f'Max accuracy: {max_roc_auc_score:.2f}%')
+        # print(f'Max roc_auc: {max_roc_auc_score:.2f}%')
 
         if log_writer is not None:
             log_writer.add_scalar('perf/val_roc_auc_score', val_stats['roc_auc_score'], epoch)

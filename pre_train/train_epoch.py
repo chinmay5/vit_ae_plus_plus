@@ -45,7 +45,8 @@ def train_one_epoch(model: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler,
                     log_writer=None,
-                    args=None):
+                    args=None,
+                    edge_map_weight=0):
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -68,9 +69,15 @@ def train_one_epoch(model: torch.nn.Module,
         samples = samples.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            loss, _, _ = model(samples, mask_ratio=args.mask_ratio)
+            loss, _, _ = model(samples, mask_ratio=args.mask_ratio, edge_map_weight=0.01)
 
+        # This is based on our modification for weighted loss
+        # loss_value = loss.item()
+        weighted_loss, edge_map_loss, reconstruction_loss = loss[0], loss[1], loss[2]
+        loss = loss[0]
         loss_value = loss.item()
+        metric_logger.update(edge_map_loss=edge_map_loss)
+        metric_logger.update(reconstruction_loss=reconstruction_loss)
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
@@ -90,6 +97,9 @@ def train_one_epoch(model: torch.nn.Module,
         metric_logger.update(lr=lr)
 
         loss_value_reduce = misc.all_reduce_mean(loss_value)
+        #  Our extra logs
+        reconstruction_loss_value_reduce = misc.all_reduce_mean(reconstruction_loss)
+        edge_map_loss_value_reduce = misc.all_reduce_mean(edge_map_loss)
         if log_writer is not None and (data_iter_step + 1) % accum_iter == 0:
             """ We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.
@@ -97,6 +107,9 @@ def train_one_epoch(model: torch.nn.Module,
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
+
+            log_writer.add_scalar('reconstruction_loss', reconstruction_loss_value_reduce, epoch_1000x)
+            log_writer.add_scalar('sobel_loss', edge_map_loss_value_reduce, epoch_1000x)
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -108,7 +121,7 @@ def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
     parser.add_argument('--batch_size', default=4, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--epochs', default=400, type=int)
+    parser.add_argument('--epochs', default=1000, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
@@ -272,13 +285,16 @@ def main(args):
 
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
+        # loss weighting for the edge maps
+        edge_map_weight = max(0.01, (1 - 50 * epoch/args.epochs))
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
             model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
-            args=args
+            args=args,
+            edge_map_weight=edge_map_weight
         )
 
         if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):

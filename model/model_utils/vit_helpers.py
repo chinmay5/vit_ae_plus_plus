@@ -19,7 +19,7 @@ def get_3d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
     grid_l = np.arange(grid_size, dtype=np.float32)
     grid_h = np.arange(grid_size, dtype=np.float32)
     grid_w = np.arange(grid_size, dtype=np.float32)
-    grid = np.meshgrid(grid_l, grid_w, grid_h)  # here w goes first
+    grid = np.meshgrid(grid_l, grid_h, grid_w)  # Different from the github impl. Look at https://github.com/facebookresearch/mae/issues/18
     grid = np.stack(grid, axis=0)
 
     grid = grid.reshape([-1, 1, grid_size, grid_size, grid_size])
@@ -32,14 +32,14 @@ def get_3d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
 def get_3d_sincos_pos_embed_from_grid(embed_dim, grid):
     assert embed_dim % 2 == 0
 
-    # use one third of dimensions to encode grid_l, grid_l and final dim for grid_w
+    # use one third of dimensions to encode grid_l, grid_h and final dim for grid_w
     res = embed_dim // 3
     if res % 2 != 0:
         res += 1
     factor_w = embed_dim - 2 * res
-    emb_l = get_1d_sincos_pos_embed_from_grid(res, grid[0])  # (H*W, D/2)
-    emb_h = get_1d_sincos_pos_embed_from_grid(res, grid[1])  # (H*W, D/2)
-    emb_w = get_1d_sincos_pos_embed_from_grid(factor_w, grid[2])  # (H*W, D/2)
+    emb_l = get_1d_sincos_pos_embed_from_grid(res, grid[0])  # (L*H*W, D//3)
+    emb_h = get_1d_sincos_pos_embed_from_grid(res, grid[1])  # (L*H*W, D//3)
+    emb_w = get_1d_sincos_pos_embed_from_grid(factor_w, grid[2])  # (L*H*W, D-D//3-D//3)
 
     emb = np.concatenate([emb_l, emb_h, emb_w], axis=1)  # (L*H*W, D)
     return emb

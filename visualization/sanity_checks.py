@@ -18,14 +18,31 @@ from model.model_factory import get_models
 from model.model_utils.vit_helpers import interpolate_pos_embed
 
 
+def plot_img_util(val_input):
+    scaled_input = (val_input - val_input.min()) / (val_input.max() - val_input.min())  # [-1, 1]
+    scaled_input = (scaled_input + 1) / 2  # [0, 1]
+    scaled_input = (255 * scaled_input).to(torch.uint8)
+    return scaled_input
+
+
+def process_und_generate_mask(model, mask):
+    mask = mask.detach()
+    mask = mask.unsqueeze(-1).repeat(1, 1, model.patch_embed.patch_size[0] ** 3 * 1)  # (N, L*H*W, p*p*1) 1=num_channel
+    mask = model.unpatchify(mask)  # 1 is removing, 0 is keeping
+    # mask = torch.einsum('nclhw->nlhwc', mask).detach().cpu()
+    mask = mask.detach()
+    return mask
+
 
 @torch.no_grad()
-def check_reconstruction(data_loader, model, device,log_writer=None):
+def check_reconstruction(data_loader, model, device, log_writer=None):
     # switch to evaluation mode
     model.eval()
     outGT = torch.FloatTensor().to(device)
     outPRED = torch.FloatTensor().to(device)
     input_img = torch.FloatTensor().to(device)
+    maskTensor = torch.FloatTensor().to(device)
+
     for batch in tqdm(data_loader):
         images = batch[0]
         target = batch[-1]
@@ -34,22 +51,23 @@ def check_reconstruction(data_loader, model, device,log_writer=None):
 
         # compute output
         with torch.cuda.amp.autocast():
-            _,output,_ = model(images)
+            _, output, mask = model(images)
             output = model.unpatchify(output)
-            print(f"\nThe pred fraction is {(output > 0).sum()/(output.size(0)* 96*96*96)}")
-            print(f"\nThe gt fraction is {(images > 0).sum()/(images.size(0)* 96*96*96)}")
+            print(f"\nThe pred fraction is {(output > 0).sum() / (output.size(0) * 96 * 96 * 96)}")
+            print(f"\nThe gt fraction is {(images > 0).sum() / (images.size(0) * 96 * 96 * 96)}")
+            mask = process_und_generate_mask(model=model, mask=mask)
         outPRED = torch.cat((outPRED, output), 0)
         outGT = torch.cat((outGT, target), 0)
         input_img = torch.cat((input_img, images), 0)
+        maskTensor = torch.cat((maskTensor, mask), 0)
+
     if log_writer is not None:
-        gt_img = input_img[0].squeeze_().unsqueeze(1)
-        output = outPRED[0].squeeze_().unsqueeze(1)
-        print(gt_img.max())
-        print(gt_img.min())
-        img_seq = (output + 1)/2  * 255# between 0 and 1
-        gt_img = (gt_img + 1)/2  * 255# between 0 and 1
+        gt_img = plot_img_util(input_img[0].squeeze_().unsqueeze(1))
+        output = plot_img_util(outPRED[0].squeeze_().unsqueeze(1))
+        mask_img = plot_img_util(maskTensor[0].squeeze_().unsqueeze(1))
         log_writer.add_images(tag='feat_set', img_tensor=output)
         log_writer.add_images(tag='input_img', img_tensor=gt_img)
+        log_writer.add_images(tag='mask_img', img_tensor=mask_img)
 
 
 def get_args_parser():
@@ -72,7 +90,7 @@ def get_args_parser():
                         help='Patch size for dividing the input')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-120.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-20.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
     # parser.set_defaults(global_pool=True)
@@ -118,9 +136,8 @@ def main(args):
 
     cudnn.benchmark = True
 
-
     dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, use_z_score=True)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='val', args=args, use_z_score=True)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='valid', args=args, use_z_score=True)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir')

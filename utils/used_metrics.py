@@ -11,12 +11,12 @@ enc.fit(possible_labels)
 
 def roc_auc(predictions, target):
     # Converting raw scores into probabilities
-    find_vals(predictions, target)
+    specificity, sensitivity = find_vals(predictions, target)
     predictions = torch.softmax(predictions, dim=1)
     predictions, target = predictions.cpu().numpy(), target.cpu().numpy()
     target_one_hot = enc.transform(target.reshape(-1, 1)).toarray()  # Reshaping needed by the library
     # Arguments take 'GT' before taking 'predictions'
-    return roc_auc_score(target_one_hot, predictions)
+    return roc_auc_score(target_one_hot, predictions), specificity, sensitivity
 
 
 def find_vals(predictions, target):

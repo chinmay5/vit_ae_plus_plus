@@ -67,10 +67,10 @@ def get_args_parser():
                         help='Patch size for dividing the input')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-60.pth',
+    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-240.pth',
                         help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
-    # parser.set_defaults(global_pool=True)
+    parser.set_defaults(global_pool=True)
     parser.add_argument('--cls_token', action='store_false', dest='global_pool',
                         help='Use class token instead of global pool for classification')
 
@@ -78,7 +78,7 @@ def get_args_parser():
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
 
-    parser.add_argument('--log_dir', default='output_dir/logs',
+    parser.add_argument('--log_dir', default='output_dir/finetune_dir',
                         help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -96,6 +96,8 @@ def get_args_parser():
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
+    parser.add_argument('--drop_path', type=float, default=0.1, metavar='PCT',
+                        help='Drop path rate (default: 0.1)')
 
     return parser
 

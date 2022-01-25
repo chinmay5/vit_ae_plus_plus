@@ -267,17 +267,17 @@ train_X_vit = np.load(os.path.join(ssl_feature_dir, 'features.npy'))
 test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
 # TODO: Should we load train_y_ from our splits???
 # Normalize the features
-for ii in range(np.shape(train_X_vit)[1]):
-    train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
-    test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
+# for ii in range(np.shape(train_X_vit)[1]):
+#     train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
+#     test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
 
 temp_pred_vit = classification(train_features=train_X_vit, train_label=train_y_, test_features=test_X_vit)
 temp_pred_vit = temp_pred_vit[:, 1]
 
 
 
-temp_pred_vit[temp_pred_vit>=0.4] = 1
-temp_pred_vit[temp_pred_vit<0.4] = 0
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
 cm = confusion_matrix(temp_pred_vit, temp_label)
 print(cm)
 specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
