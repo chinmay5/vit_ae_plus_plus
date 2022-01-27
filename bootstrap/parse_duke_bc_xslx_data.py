@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 import pydicom
 from tqdm import tqdm
+import nibabel as nib
+import SimpleITK as sitk
 
 from environment_setup import PROJECT_ROOT_DIR
 
@@ -16,15 +18,20 @@ MRI_IMG_DIR = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v1202
 SAVE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'cropped_images')
 SPLIT_SAVE_FILE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'data_splits')
 RADIOMICS_SAVE_FILE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'radiomics_feat')
+NIFTY_SAVE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Cancer-MRI_v120201203', 'nifty_paths')
+
 os.makedirs(SAVE_PATH, exist_ok=True)
 os.makedirs(SPLIT_SAVE_FILE_PATH, exist_ok=True)
 os.makedirs(RADIOMICS_SAVE_FILE_PATH, exist_ok=True)
+os.makedirs(NIFTY_SAVE_PATH, exist_ok=True)
 
 required_cols = ['Patient ID', 'Lymphadenopathy or Suspicious Nodes']
 converters = {
     'Patient ID': str,
     'Lymphadenopathy or Suspicious Nodes': int
 }
+
+reader = sitk.ImageSeriesReader()
 
 
 def see_all_cols(filename):
@@ -94,10 +101,19 @@ def select_file(scan_name, include_pre=False):
         bad_files.append(scan_name)
         raise AttributeError("Multiple candidate files. Please check scan_type criterion.")
     selected_folder = selected_folder[0]
-    dicom_location = os.path.join(folder_path, selected_folder)
-    dicom_files = os.listdir(os.path.join(folder_path, selected_folder))
-    sorted(dicom_files, key=lambda x: x[2: x.find(".dcm")])
-    scan = read_dicoms_as_np_array(dicom_files=dicom_files, dicom_location=dicom_location)
+    return read_dicom_scan(folder_path, selected_folder, scan_name)
+
+
+def read_dicom_scan(folder_path, selected_folder, scan_name):
+    dicom_names = reader.GetGDCMSeriesFileNames(os.path.join(folder_path, selected_folder))
+    reader.SetFileNames(dicom_names)
+    image = reader.Execute()
+    scan = sitk.GetArrayFromImage(image)
+    # dicom2nifti.convert_directory(os.path.join(folder_path, selected_folder), os.path.join(NIFTY_SAVE_PATH, f"{scan_name}"))
+    # scan = nib.load(os.path.join(NIFTY_SAVE_PATH, f"{scan_name}"))
+    # dicom_files = os.listdir(os.path.join(folder_path, selected_folder))
+    # sorted(dicom_files, key=lambda x: x[2: x.find(".dcm")])
+    # scan = read_dicoms_as_np_array(dicom_files=dicom_files, dicom_location=dicom_location)
     return scan
 
 

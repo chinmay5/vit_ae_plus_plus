@@ -11,10 +11,11 @@
 import argparse
 import math
 import os
+from configparser import ConfigParser
 
 from dataset.dataset_factory import get_dataset
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -24,7 +25,7 @@ import numpy as np
 import torch
 from torch.backends import cudnn
 
-from dataset.brain_tumor.pretrain_tumor_data import FlairData
+from read_configs import bootstrap
 from utils import misc, lr_sched
 
 from model.model_factory import get_models
@@ -69,7 +70,7 @@ def train_one_epoch(model: torch.nn.Module,
         samples = samples.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            loss, _, _ = model(samples, mask_ratio=args.mask_ratio, edge_map_weight=0.01)
+            loss, _, _ = model(samples, mask_ratio=args.mask_ratio, edge_map_weight=edge_map_weight)
 
         # This is based on our modification for weighted loss
         # loss_value = loss.item()
@@ -119,9 +120,9 @@ def train_one_epoch(model: torch.nn.Module,
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
-    parser.add_argument('--batch_size', default=4, type=int,
-                        help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--epochs', default=1000, type=int)
+    # parser.add_argument('--batch_size', default=4, type=int,
+    #                     help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
+    # parser.add_argument('--epochs', default=1000, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
@@ -135,19 +136,19 @@ def get_args_parser():
     parser.add_argument('--in_channels', default=1, type=int,
                         help='Number of channels in the input')
 
-    parser.add_argument('--patch_size', default=8, type=int,
-                        help='Patch size for dividing the input')
+    # parser.add_argument('--patch_size', default=8, type=int,
+    #                     help='Patch size for dividing the input')
 
-    parser.add_argument('--mask_ratio', default=0.50, type=float,
-                        help='Masking ratio (percentage of removed patches).')
+    # parser.add_argument('--mask_ratio', default=0.50, type=float,
+    #                     help='Masking ratio (percentage of removed patches).')
 
     parser.add_argument('--norm_pix_loss', action='store_true',
                         help='Use (per-patch) normalized pixels as targets for computing loss')
     parser.set_defaults(norm_pix_loss=False)
 
     # Optimizer parameters
-    parser.add_argument('--weight_decay', type=float, default=0.05,
-                        help='weight decay (default: 0.05)')
+    # parser.add_argument('--weight_decay', type=float, default=0.05,
+    #                     help='weight decay (default: 0.05)')
 
     parser.add_argument('--lr', type=float, default=None, metavar='LR',
                         help='learning rate (absolute lr)')
@@ -160,21 +161,21 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--dataset', default='brats', type=str,
-                        help='dataset name')
+    # parser.add_argument('--dataset', default='brats', type=str,
+    #                     help='dataset name')
 
-    parser.add_argument('--output_dir', default='output_dir',
-                        help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='output_dir',
-                        help='path where to tensorboard log')
+    # parser.add_argument('--output_dir', default='output_dir',
+    #                     help='path where to save, empty for no saving')
+    # parser.add_argument('--log_dir', default='output_dir',
+    #                     help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
 
-    parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
-                        help='start epoch')
+    # parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
+    #                     help='start epoch')
     parser.add_argument('--num_workers', default=8, type=int)
     parser.add_argument('--pin_mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
@@ -217,7 +218,8 @@ def main(args):
     ]
     transformations = tio.Compose(transforms)
     # TODO: Evaluate the effects better
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=transformations, use_z_score=True)
+    args = bootstrap(args=args, key='SETUP')
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=transformations, use_z_score=args.use_z_score)
     print(dataset_train)
 
     if False:  # args.distributed:
@@ -286,7 +288,7 @@ def main(args):
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         # loss weighting for the edge maps
-        edge_map_weight = max(0.01, (1 - 50 * epoch/args.epochs))
+        edge_map_weight = 0.01 * (1 - epoch/args.epochs)
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
@@ -319,6 +321,6 @@ def main(args):
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
-    if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    # if args.output_dir:
+    #     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)

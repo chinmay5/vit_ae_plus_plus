@@ -4,15 +4,15 @@ import os
 from tqdm import tqdm
 
 from dataset.dataset_factory import get_dataset
+from read_configs import bootstrap
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 import numpy as np
 import torch
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
 
-from dataset.brain_tumor.pretrain_tumor_data import build_dataset
 from environment_setup import PROJECT_ROOT_DIR
 from model.model_factory import get_models
 from model.model_utils.vit_helpers import interpolate_pos_embed
@@ -72,10 +72,10 @@ def check_reconstruction(data_loader, model, device, log_writer=None):
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE ssl feature extraction module', add_help=False)
-    parser.add_argument('--batch_size', default=4, type=int,
-                        help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--dataset', default='brats', type=str,
-                        help='dataset name')
+    # parser.add_argument('--batch_size', default=4, type=int,
+    #                     help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
+    # parser.add_argument('--dataset', default='brats', type=str,
+    #                     help='dataset name')
     # Model parameters
     parser.add_argument('--model', default='mae_vit_base_patch16', type=str, metavar='MODEL',
                         help='Name of model to train')
@@ -86,14 +86,11 @@ def get_args_parser():
     parser.add_argument('--in_channels', default=1, type=int,
                         help='Number of channels in the input')
 
-    parser.add_argument('--patch_size', default=8, type=int,
-                        help='Patch size for dividing the input')
+    # parser.add_argument('--patch_size', default=8, type=int,
+    #                     help='Patch size for dividing the input')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-20.pth',
-                        help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
-    # parser.set_defaults(global_pool=True)
     parser.add_argument('--cls_token', action='store_false', dest='global_pool',
                         help='Use class token instead of global pool for classification')
 
@@ -101,15 +98,15 @@ def get_args_parser():
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
 
-    parser.add_argument('--log_dir', default='output_dir/logs',
-                        help='path where to tensorboard log')
+    # parser.add_argument('--log_dir', default='output_dir/logs',
+    #                     help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=32, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
 
-    parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
-                        help='start epoch')
+    # parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
+    #                     help='start epoch')
     parser.add_argument('--eval', action='store_true',
                         help='Perform evaluation only')
     parser.add_argument('--dist_eval', action='store_true', default=False,
@@ -136,8 +133,10 @@ def main(args):
 
     cudnn.benchmark = True
 
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, use_z_score=True)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='valid', args=args, use_z_score=True)
+    args = bootstrap(args=args, key='SANITY')
+
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, use_z_score=args.use_z_score)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='valid', args=args, use_z_score=args.use_z_score)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir')
@@ -165,6 +164,8 @@ def main(args):
     args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
     train_writer = SummaryWriter(args.log_dir)
 
+    args.finetune = os.path.join(args.output_dir, "checkpoints", args.checkpoint)
+
     if args.finetune and not args.eval:
         args.finetune = os.path.join(PROJECT_ROOT_DIR, args.finetune)
         checkpoint = torch.load(args.finetune, map_location='cpu')
@@ -188,7 +189,7 @@ def main(args):
     check_reconstruction(data_loader_train, model, device, log_writer=train_writer)
     check_reconstruction(data_loader_test, model, device)
     # Also, let us save the vit model. We need not go through the entire process of getting the vit from autoenc everytime
-    ssl_file_name = os.path.join(PROJECT_ROOT_DIR, 'output_dir', 'checkpoints', 'ssl_feat.pth')
+    ssl_file_name = os.path.join(PROJECT_ROOT_DIR, args.output_dir, 'checkpoints', 'ssl_feat.pth')
     torch.save(model.state_dict(), ssl_file_name)
 
 

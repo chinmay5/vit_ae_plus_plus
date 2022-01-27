@@ -3,9 +3,10 @@ import math
 import os
 
 from dataset.dataset_factory import get_dataset
+from read_configs import bootstrap
 from utils.used_metrics import roc_auc
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import sys
 from pathlib import Path
@@ -31,7 +32,7 @@ import torchio as tio
 
 
 def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, loss_scaler,
-                    max_norm=0, mixup_fn=None, log_writer=None, args=None):
+                    max_norm=0, log_writer=None, args=None):
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -53,9 +54,6 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
-
-        if mixup_fn is not None:
-            samples, targets = mixup_fn(samples, targets)
 
         with torch.cuda.amp.autocast():
             outputs = model(samples)
@@ -101,9 +99,9 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 
 
 @torch.no_grad()
-def evaluate(data_loader, model, device):
+def evaluate(data_loader, model, device, args):
     # Weights for breast_tumor = 2:1 majority being label 0
-    criterion = torch.nn.CrossEntropyLoss(weight=torch.as_tensor([4, 1], dtype=torch.float).to(device))
+    criterion = torch.nn.CrossEntropyLoss(weight=args.cross_entropy_wt).to(device)
 
     metric_logger = misc.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -145,9 +143,9 @@ def evaluate(data_loader, model, device):
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE fine-tuning for image classification', add_help=False)
-    parser.add_argument('--batch_size', default=4, type=int,
-                        help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    parser.add_argument('--epochs', default=50, type=int)
+    # parser.add_argument('--batch_size', default=4, type=int,
+    #                     help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
+    # parser.add_argument('--epochs', default=50, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
@@ -170,8 +168,8 @@ def get_args_parser():
     # Optimizer parameters
     parser.add_argument('--clip_grad', type=float, default=None, metavar='NORM',
                         help='Clip gradient norm (default: None, no clipping)')
-    parser.add_argument('--weight_decay', type=float, default=0.05,
-                        help='weight decay (default: 0.05)')
+    # parser.add_argument('--weight_decay', type=float, default=0.05,
+    #                     help='weight decay (default: 0.05)')
 
     parser.add_argument('--lr', type=float, default=None, metavar='LR',
                         help='learning rate (absolute lr)')
@@ -187,66 +185,66 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Augmentation parameters
-    parser.add_argument('--color_jitter', type=float, default=None, metavar='PCT',
-                        help='Color jitter factor (enabled only when not using Auto/RandAug)')
-    parser.add_argument('--aa', type=str, default='rand-m9-mstd0.5-inc1', metavar='NAME',
-                        help='Use AutoAugment policy. "v0" or "original". " + "(default: rand-m9-mstd0.5-inc1)'),
-    parser.add_argument('--smoothing', type=float, default=0,
-                        help='Label smoothing (default: 0.1)')
+    # parser.add_argument('--color_jitter', type=float, default=None, metavar='PCT',
+    #                     help='Color jitter factor (enabled only when not using Auto/RandAug)')
+    # parser.add_argument('--aa', type=str, default='rand-m9-mstd0.5-inc1', metavar='NAME',
+    #                     help='Use AutoAugment policy. "v0" or "original". " + "(default: rand-m9-mstd0.5-inc1)'),
+    # parser.add_argument('--smoothing', type=float, default=0,
+    #                     help='Label smoothing (default: 0.1)')
 
     # * Random Erase params
-    parser.add_argument('--reprob', type=float, default=0.25, metavar='PCT',
-                        help='Random erase prob (default: 0.25)')
-    parser.add_argument('--remode', type=str, default='pixel',
-                        help='Random erase mode (default: "pixel")')
-    parser.add_argument('--recount', type=int, default=1,
-                        help='Random erase count (default: 1)')
-    parser.add_argument('--resplit', action='store_true', default=False,
-                        help='Do not random erase first (clean) augmentation split')
+    # parser.add_argument('--reprob', type=float, default=0.25, metavar='PCT',
+    #                     help='Random erase prob (default: 0.25)')
+    # parser.add_argument('--remode', type=str, default='pixel',
+    #                     help='Random erase mode (default: "pixel")')
+    # parser.add_argument('--recount', type=int, default=1,
+    #                     help='Random erase count (default: 1)')
+    # parser.add_argument('--resplit', action='store_true', default=False,
+    #                     help='Do not random erase first (clean) augmentation split')
 
     # * Mixup params
-    parser.add_argument('--mixup', type=float, default=0,
-                        help='mixup alpha, mixup enabled if > 0.')
-    parser.add_argument('--cutmix', type=float, default=0,
-                        help='cutmix alpha, cutmix enabled if > 0.')
-    parser.add_argument('--cutmix_minmax', type=float, nargs='+', default=None,
-                        help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
-    parser.add_argument('--mixup_prob', type=float, default=1.0,
-                        help='Probability of performing mixup or cutmix when either/both is enabled')
-    parser.add_argument('--mixup_switch_prob', type=float, default=0.5,
-                        help='Probability of switching to cutmix when both mixup and cutmix enabled')
-    parser.add_argument('--mixup_mode', type=str, default='batch',
-                        help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
+    # parser.add_argument('--mixup', type=float, default=0,
+    #                     help='mixup alpha, mixup enabled if > 0.')
+    # parser.add_argument('--cutmix', type=float, default=0,
+    #                     help='cutmix alpha, cutmix enabled if > 0.')
+    # parser.add_argument('--cutmix_minmax', type=float, nargs='+', default=None,
+    #                     help='cutmix min/max ratio, overrides alpha and enables cutmix if set (default: None)')
+    # parser.add_argument('--mixup_prob', type=float, default=1.0,
+    #                     help='Probability of performing mixup or cutmix when either/both is enabled')
+    # parser.add_argument('--mixup_switch_prob', type=float, default=0.5,
+    #                     help='Probability of switching to cutmix when both mixup and cutmix enabled')
+    # parser.add_argument('--mixup_mode', type=str, default='batch',
+    #                     help='How to apply mixup/cutmix params. Per "batch", "pair", or "elem"')
 
     # * Finetuning params
-    parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-399.pth',
-                        help='finetune from checkpoint')
+    # parser.add_argument('--finetune', default='output_dir/checkpoints/checkpoint-399.pth',
+    #                     help='finetune from checkpoint')
     parser.add_argument('--global_pool', action='store_true')
     parser.set_defaults(global_pool=True)
     parser.add_argument('--cls_token', action='store_false', dest='global_pool',
                         help='Use class token instead of global pool for classification')
 
     # Dataset parameters
-    parser.add_argument('--dataset', default='brats', type=str,
-                        help='dataset name')
+    # parser.add_argument('--dataset', default='brats', type=str,
+    #                     help='dataset name')
     parser.add_argument('--nb_classes', default=2, type=int,
                         help='number of the classification types')
 
-    parser.add_argument('--output_dir', default='output_dir/finetune_dir',
-                        help='path where to save, empty for no saving')
-    parser.add_argument('--log_dir', default='output_dir/finetune_dir',
-                        help='path where to tensorboard log')
+    # parser.add_argument('--output_dir', default='output_dir/finetune_dir',
+    #                     help='path where to save, empty for no saving')
+    # parser.add_argument('--log_dir', default='output_dir/finetune_dir',
+    #                     help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
 
-    parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
-                        help='start epoch')
-    parser.add_argument('--eval', action='store_true',
-                        help='Perform evaluation only')
-    parser.set_defaults(eval=True)
+    # parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
+    #                     help='start epoch')
+    # parser.add_argument('--eval', action='store_true',
+    #                     help='Perform evaluation only')
+    # parser.set_defaults(eval=True)
     parser.add_argument('--dist_eval', action='store_true', default=False,
                         help='Enabling distributed evaluation (recommended during training for faster monitor')
     parser.add_argument('--num_workers', default=10, type=int)
@@ -282,17 +280,20 @@ def main(args):
 
     cudnn.benchmark = True
 
-    # TODO: Add the transforms. We won't be using cutmix, mixup etc but the conventional ones.
     transforms = [
         tio.RandomAffine(),
-        tio.RandomBlur(),
-        tio.RandomNoise(std=0.5),
+        # tio.RandomBlur(),
+        tio.RandomNoise(std=0.1),
         tio.RandomGamma(log_gamma=(-0.3, 0.3))
     ]
+    args = bootstrap(args=args, key='FINE_TUNE')
     train_transforms = tio.Compose(transforms)
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms, use_z_score=True)
-    dataset_val = get_dataset(dataset_name=args.dataset, mode='valid', args=args, transforms=None, use_z_score=True)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None, use_z_score=True)
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms,
+                                use_z_score=args.use_z_score)
+    dataset_val = get_dataset(dataset_name=args.dataset, mode='valid', args=args, transforms=None,
+                              use_z_score=args.use_z_score)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
+                               use_z_score=args.use_z_score)
 
     if False:  # args.distributed:
         num_tasks = misc.get_world_size()
@@ -319,9 +320,8 @@ def main(args):
     if args.log_dir is not None and not args.eval:
         args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
         os.makedirs(args.log_dir, exist_ok=True)
-        log_writer = SummaryWriter(log_dir=args.log_dir)
-    else:
-        log_writer = None
+        log_writer_train = SummaryWriter(log_dir=f"{args.log_dir}/train_ft")
+        log_writer_val = SummaryWriter(log_dir=f"{args.log_dir}/val_ft")
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
@@ -347,25 +347,25 @@ def main(args):
         drop_last=False
     )
 
-
     model = get_models(model_name='vit', args=args)
 
     # Align the generated folders with our structure
-    if args.output_dir:
-        args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir)
+    args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir)
+    os.makedirs(args.output_dir, exist_ok=True)
 
     if args.eval:
-        assert os.path.exists(os.path.join(args.output_dir, 'checkpoint-best_ft_model.pth')), "Make sure you have a fine-tuned model already"
+        assert os.path.exists(os.path.join(args.output_dir,
+                                           'checkpoint-best_ft_model.pth')), "Make sure you have a fine-tuned model already"
         # Now, let us load the best model and evaluate
         checkpoint = torch.load(os.path.join(args.output_dir, 'checkpoint-best_ft_model.pth'), map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         model.to(device)
-        test_stats = evaluate(data_loader_test, model, device)
+        test_stats = evaluate(data_loader_test, model, device, args=args)
         print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
         exit(0)
 
-    if args.finetune and not args.eval:
-        args.finetune = os.path.join(PROJECT_ROOT_DIR, args.finetune)
+    if not args.eval:
+        args.finetune = os.path.join(PROJECT_ROOT_DIR, args.model_load_path, "checkpoints", args.checkpoint)
         checkpoint = torch.load(args.finetune, map_location='cpu')
 
         print("Load pre-trained checkpoint from: %s" % args.finetune)
@@ -428,58 +428,66 @@ def main(args):
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
     loss_scaler = NativeScaler()
 
-    if mixup_fn is not None:
-        # smoothing is handled with mixup label transform
-        criterion = SoftTargetCrossEntropy()
-    elif args.smoothing > 0.:
-        criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
-    else:
-        # criterion = torch.nn.CrossEntropyLoss()  # Label 1 occurs ~3 times more than 0
-        print("Default case criterion")
-        criterion = torch.nn.CrossEntropyLoss(weight=torch.as_tensor([4, 1], dtype=torch.float).to(device))
-        # criterion = torch.nn.BCEWithLogitsLoss()list_val = [dataset_train[idx][1].item() for idx in range(len(dataset_tra
+    # if mixup_fn is not None:
+    #     # smoothing is handled with mixup label transform
+    #     criterion = SoftTargetCrossEntropy()
+    # elif args.smoothing > 0.:
+    #     criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
+    # else:
+    # criterion = torch.nn.CrossEntropyLoss()  # Label 1 occurs ~3 times more than 0
+    print("Default case criterion")
+    criterion = torch.nn.CrossEntropyLoss(weight=args.cross_entropy_wt).to(device)
+    # criterion = torch.nn.BCEWithLogitsLoss()list_val = [dataset_train[idx][1].item() for idx in range(len(dataset_tra
 
     print("criterion = %s" % str(criterion))
 
     misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
 
-
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
-    max_spec_sen_sum = 0.0
+    max_spec_sen_sum, max_spec, max_sen = 0.0, 0.0, 0.0
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
-            args.clip_grad, mixup_fn,
-            log_writer=log_writer,
+            args.clip_grad,
+            log_writer=log_writer_train,
             args=args
         )
-        val_stats = evaluate(data_loader_val, model, device)
-        print(f"ROC_AUC score of the network on the {len(dataset_val)} val images: {val_stats['roc_auc_score']:.1f}%")
-        spec_sen_sum = val_stats['specificity'] + val_stats['sensitivity']
-        if spec_sen_sum > max_spec_sen_sum:
-            print(f"saving best model @ epoch {epoch}")
-            max_spec_sen_sum = spec_sen_sum
-            misc.save_model(
-                args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                loss_scaler=loss_scaler, epoch='best_ft_model')  # A little hack for saving model with preferred name
-        # print(f'Max roc_auc: {max_roc_auc_score:.2f}%')
+        # Let us record both train and val stats
+        train_val_stats = evaluate(data_loader_train, model, device, args=args)
+        val_stats = evaluate(data_loader_val, model, device, args=args)
 
-        if log_writer is not None:
-            log_writer.add_scalar('perf/val_roc_auc_score', val_stats['roc_auc_score'], epoch)
-            log_writer.add_scalar('perf/val_loss', val_stats['loss'], epoch)
+        print(f"ROC_AUC score of the network on the {len(dataset_val)} val images: {val_stats['roc_auc_score']:.1f}%")
+        max_spec_sen_sum = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler, max_val=max_spec_sen_sum,
+                                             model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                                             cur_val=val_stats['specificity'] + val_stats['sensitivity'],
+                                             model_name='best_ft_model')
+        # Let us save model based on the other criterions
+        max_spec = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler, max_val=max_spec,
+                                     model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                                     cur_val=val_stats['specificity'], model_name='best_spec_model')
+        max_sen = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler, max_val=max_sen,
+                                     model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                                     cur_val=val_stats['sensitivity'], model_name='best_sens_model')
+
+        # Writing the logs
+        log_writer_val.add_scalar('ft/roc_auc_score', val_stats['roc_auc_score'], epoch)
+        log_writer_val.add_scalar('ft/loss', val_stats['loss'], epoch)
+        log_writer_train.add_scalar('ft/roc_auc_score', train_val_stats['roc_auc_score'], epoch)
+        log_writer_train.add_scalar('ft/loss', train_val_stats['loss'], epoch)
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                     **{f'train_val_{k}': v for k, v in train_val_stats.items()},
                      **{f'val_{k}': v for k, v in val_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
 
         if misc.is_main_process():
-            if log_writer is not None:
-                log_writer.flush()
+            log_writer_train.flush()
+            log_writer_val.flush()
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
@@ -487,16 +495,32 @@ def main(args):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
     # Now, let us load the best model and evaluate
-    checkpoint = torch.load(os.path.join(args.output_dir, 'checkpoint-best_ft_model.pth'), map_location='cpu')
-    model.load_state_dict(checkpoint['model'])
-    test_stats = evaluate(data_loader=data_loader_test, model=model, device=device)
-    print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
+    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_ft_model.pth')
+    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_spec_model.pth')
+    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_sens_model.pth')
 
+
+def evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_ft_model.pth'):
+    checkpoint = torch.load(os.path.join(args.output_dir, f'checkpoint-{model_name}.pth'), map_location='cpu')
+    model.load_state_dict(checkpoint['model'])
+    test_stats = evaluate(data_loader=data_loader_test, model=model, device=device, args=args)
+    print(f"Accuracy of {model_name} on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
+
+
+def select_best_model(args, epoch, loss_scaler, max_val, model, model_without_ddp, optimizer, cur_val,
+                      model_name='best_ft_model'):
+    if cur_val > max_val:
+        print(f"saving {model_name} @ epoch {epoch}")
+        max_val = cur_val
+        misc.save_model(
+            args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+            loss_scaler=loss_scaler, epoch=model_name)  # A little hack for saving model with preferred name
+    return max_val
 
 
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
-    if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    # if args.output_dir:
+    #     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)
