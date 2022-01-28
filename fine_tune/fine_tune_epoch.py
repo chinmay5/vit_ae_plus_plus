@@ -354,18 +354,13 @@ def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.eval:
-        assert os.path.exists(os.path.join(args.output_dir,
-                                           'checkpoint-best_ft_model.pth')), "Make sure you have a fine-tuned model already"
-        # Now, let us load the best model and evaluate
-        checkpoint = torch.load(os.path.join(args.output_dir, 'checkpoint-best_ft_model.pth'), map_location='cpu')
-        model.load_state_dict(checkpoint['model'])
-        model.to(device)
-        test_stats = evaluate(data_loader_test, model, device, args=args)
-        print(f"Accuracy of the network on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
+        evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_ft_model', mode='test')
+        evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_spec_model', mode='test')
+        evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_sens_model', mode='test')
         exit(0)
 
     if not args.eval:
-        args.finetune = os.path.join(PROJECT_ROOT_DIR, args.model_load_path, "checkpoints", args.checkpoint)
+        args.finetune = os.path.join(PROJECT_ROOT_DIR, args.feature_extractor_load_path, "checkpoints", args.checkpoint)
         checkpoint = torch.load(args.finetune, map_location='cpu')
 
         print("Load pre-trained checkpoint from: %s" % args.finetune)
@@ -445,7 +440,7 @@ def main(args):
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
-    max_spec_sen_sum, max_spec, max_sen = 0.0, 0.0, 0.0
+    max_roc_auc_score, max_spec, max_sen = 0.0, 0.0, 0.0
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
@@ -461,9 +456,9 @@ def main(args):
         val_stats = evaluate(data_loader_val, model, device, args=args)
 
         print(f"ROC_AUC score of the network on the {len(dataset_val)} val images: {val_stats['roc_auc_score']:.1f}%")
-        max_spec_sen_sum = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler, max_val=max_spec_sen_sum,
+        max_roc_auc_score = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler, max_val=max_roc_auc_score,
                                              model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                                             cur_val=val_stats['specificity'] + val_stats['sensitivity'],
+                                             cur_val=val_stats['roc_auc_score'],
                                              model_name='best_ft_model')
         # Let us save model based on the other criterions
         max_spec = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler, max_val=max_spec,
@@ -495,14 +490,18 @@ def main(args):
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
     # Now, let us load the best model and evaluate
-    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_ft_model.pth')
-    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_spec_model.pth')
-    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_sens_model.pth')
+    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_ft_model')
+    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_spec_model')
+    evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_sens_model')
 
 
-def evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_ft_model.pth'):
-    checkpoint = torch.load(os.path.join(args.output_dir, f'checkpoint-{model_name}.pth'), map_location='cpu')
+def evaluate_best_val_model(args, data_loader_test, dataset_test, device, model, model_name='best_ft_model.pth', mode=None):
+    if mode == 'test':
+        checkpoint = torch.load(os.path.join(PROJECT_ROOT_DIR, args.eval_model_path, f'checkpoint-{model_name}.pth'), map_location='cpu')
+    else:
+        checkpoint = torch.load(os.path.join(args.output_dir, f'checkpoint-{model_name}.pth'), map_location='cpu')
     model.load_state_dict(checkpoint['model'])
+    model.to(device)
     test_stats = evaluate(data_loader=data_loader_test, model=model, device=device, args=args)
     print(f"Accuracy of {model_name} on the {len(dataset_test)} test images: {test_stats['roc_auc_score']:.1f}%")
 

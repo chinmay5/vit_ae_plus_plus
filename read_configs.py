@@ -38,5 +38,6 @@ def bootstrap(args, key='SETUP'):
     args.patch_size = parser[key].getint('patch_size', fallback=8)
     args.drop_path = parser[key].getfloat('drop_path', fallback=0)
     args.eval = parser[key].getboolean('eval', fallback=False)
-    args.model_load_path = parser[key].get('model_load_path', fallback="")
+    args.feature_extractor_load_path = parser[key].get('feature_extractor_load_path', fallback="")
+    args.eval_model_path = parser[key].get('eval_model_path', fallback="")
     return args

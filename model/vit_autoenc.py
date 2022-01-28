@@ -4,6 +4,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from model.model_utils.gaussian_filter import perform_3d_gaussian_blur
 from model.model_utils.sobel_filter import SobelFilter3d
 from model.model_utils.vit_helpers import get_3d_sincos_pos_embed
 from model.vit import PatchEmbed3D, Block
@@ -217,7 +218,7 @@ class MaskedAutoencoderViT(nn.Module):
 
     def get_weighted_loss(self, pred, target, mask, edge_map_weight=0):
         pred_vol, target_vol = self.unpatchify(pred), self.unpatchify(target)
-        pred_edge_map, orig_input_edge_map = self.sobel_filter3D(pred_vol), self.sobel_filter3D(target_vol)
+        pred_edge_map, orig_input_edge_map = self.sobel_filter3D(pred_vol), self.sobel_filter3D(perform_3d_gaussian_blur(target_vol, blur_sigma=2))
         edge_map_loss = F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
         reconstruction_loss = ((pred - target) ** 2).mean(dim=-1)
         reconstruction_loss = (reconstruction_loss * mask).sum() / mask.sum()  # mean loss on removed patches
