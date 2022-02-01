@@ -6,7 +6,7 @@ from dataset.dataset_factory import get_dataset
 from read_configs import bootstrap
 from utils.used_metrics import roc_auc
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 import sys
 from pathlib import Path
@@ -29,10 +29,13 @@ import time
 import json
 import datetime
 import torchio as tio
+from utils.custom_loss import SoftCrossEntropyWithWeightsLoss
+
+from timm.data.mixup import Mixup
 
 
 def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, loss_scaler,
-                    max_norm=0, log_writer=None, args=None):
+                    max_norm=0, log_writer=None, args=None, mix_up_fn=None):
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -54,6 +57,9 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 
         samples = samples.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
+
+        if mix_up_fn is not None:
+            samples, targets = mix_up_fn(samples, targets)
 
         with torch.cuda.amp.autocast():
             outputs = model(samples)
@@ -101,6 +107,7 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 @torch.no_grad()
 def evaluate(data_loader, model, device, args):
     # Weights for breast_tumor = 2:1 majority being label 0
+    # Since evaluation is always hard target and not SoftTarget
     criterion = torch.nn.CrossEntropyLoss(weight=args.cross_entropy_wt).to(device)
 
     metric_logger = misc.MetricLogger(delimiter="  ")
@@ -328,7 +335,7 @@ def main(args):
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
-        drop_last=False,
+        drop_last=True,
     )
 
     data_loader_val = torch.utils.data.DataLoader(
@@ -385,11 +392,11 @@ def main(args):
 
         # manually initialize fc layer
         # Let us fix the initial layers of the network such that only the classification head is fine tuned
-        for name, child in model.named_children():
-            if name == 'head':
-                continue
-            for param in child.parameters():
-                param.requires_grad = False
+        # for name, child in model.named_children():
+        #     if name == 'head':
+        #         continue
+        #     for param in child.parameters():
+        #         param.requires_grad = False
         torch.nn.init.trunc_normal_(model.head.weight, std=2e-5)
 
     model.to(device)
@@ -422,16 +429,18 @@ def main(args):
                                         )
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
     loss_scaler = NativeScaler()
-
-    # if mixup_fn is not None:
-    #     # smoothing is handled with mixup label transform
-    #     criterion = SoftTargetCrossEntropy()
+    mixup_fn = None
+    if args.use_mixup:
+        # smoothing is handled with mixup label transform
+        mixup_fn = Mixup(mixup_alpha=0.1, num_classes=2)
+        criterion = SoftCrossEntropyWithWeightsLoss(weights=args.cross_entropy_wt).to(device)
     # elif args.smoothing > 0.:
     #     criterion = LabelSmoothingCrossEntropy(smoothing=args.smoothing)
     # else:
     # criterion = torch.nn.CrossEntropyLoss()  # Label 1 occurs ~3 times more than 0
-    print("Default case criterion")
-    criterion = torch.nn.CrossEntropyLoss(weight=args.cross_entropy_wt).to(device)
+    else:
+        print("Default case criterion")
+        criterion = torch.nn.CrossEntropyLoss(weight=args.cross_entropy_wt).to(device)
     # criterion = torch.nn.BCEWithLogitsLoss()list_val = [dataset_train[idx][1].item() for idx in range(len(dataset_tra
 
     print("criterion = %s" % str(criterion))
@@ -447,7 +456,7 @@ def main(args):
         train_stats = train_one_epoch(
             model, criterion, data_loader_train,
             optimizer, device, epoch, loss_scaler,
-            args.clip_grad,
+            args.clip_grad,mix_up_fn=mixup_fn,
             log_writer=log_writer_train,
             args=args
         )
