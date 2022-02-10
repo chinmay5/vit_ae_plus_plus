@@ -61,24 +61,25 @@ def train_one_epoch(model: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    for data_iter_step, (samples, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (sample, _, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
-        samples = samples.to(device, non_blocking=True)
+        sample = sample.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            loss, _, _ = model(samples, mask_ratio=args.mask_ratio, edge_map_weight=edge_map_weight)
+            loss, _, _ = model(sample=sample, mask_ratio=args.mask_ratio, edge_map_weight=edge_map_weight)
 
         # This is based on our modification for weighted loss
         # loss_value = loss.item()
-        weighted_loss, edge_map_loss, reconstruction_loss = loss[0], loss[1], loss[2]
+        weighted_loss, edge_map_loss, reconstruction_loss, perceptual_loss = loss[0], loss[1], loss[2], loss[3]
         loss = loss[0]
         loss_value = loss.item()
         metric_logger.update(edge_map_loss=edge_map_loss)
         metric_logger.update(reconstruction_loss=reconstruction_loss)
+        metric_logger.update(perceptual_loss=perceptual_loss)
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
@@ -101,6 +102,7 @@ def train_one_epoch(model: torch.nn.Module,
         #  Our extra logs
         reconstruction_loss_value_reduce = misc.all_reduce_mean(reconstruction_loss)
         edge_map_loss_value_reduce = misc.all_reduce_mean(edge_map_loss)
+        perceptual_loss_loss_value_reduce = misc.all_reduce_mean(perceptual_loss)
         if log_writer is not None and (data_iter_step + 1) % accum_iter == 0:
             """ We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.
@@ -111,6 +113,7 @@ def train_one_epoch(model: torch.nn.Module,
 
             log_writer.add_scalar('reconstruction_loss', reconstruction_loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('sobel_loss', edge_map_loss_value_reduce, epoch_1000x)
+            log_writer.add_scalar('perceptual_loss', perceptual_loss_loss_value_reduce, epoch_1000x)
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -208,7 +211,6 @@ def main(args):
 
     cudnn.benchmark = True
 
-    # simple augmentation
     # TODO: Put argument values.
     transforms = [
         tio.RandomAffine(),

@@ -123,7 +123,9 @@ def sanity_check_fur_scan_shapes():
     :return: None
     """
     for item in os.listdir(SAVE_PATH):
-        assert np.all(np.load(os.path.join(SAVE_PATH, item)).shape == np.array([96, 96, 96])), f"Invalid shape for {item}"
+        assert np.all(
+            np.load(os.path.join(SAVE_PATH, item)).shape == np.array([96, 96, 96])), f"Invalid shape for {item}"
+
 
 def process_single_scan(scan_name, triage=True, include_pre=False):
     row_begin, row_end, col_begin, col_end, slice_begin, slice_end = df.loc[scan_name]
@@ -145,7 +147,8 @@ def process_single_scan(scan_name, triage=True, include_pre=False):
         pad_length_x = 96 - cropped_scan.shape[0]
         cropped_scan = np.pad(cropped_scan, [(0, pad_length_x), (0, 0), (0, 0)])
     # assert slice_end <= x_dim and row_end <= y_dim and col_end < z_dim, f"Something wrong with the orientation for {scan_name} with {slice_end, row_end, col_end} while its shape is {mri_scan.shape}"
-    assert np.all(cropped_scan.shape == np.array([96, 96, 96])), f"Something wrong with the orientation for {scan_name} with begin {slice_begin, row_begin, col_begin} end {slice_end, row_end, col_end} while its shape is {mri_scan.shape} and crop shape {cropped_scan.shape}"
+    assert np.all(cropped_scan.shape == np.array([96, 96,
+                                                  96])), f"Something wrong with the orientation for {scan_name} with begin {slice_begin, row_begin, col_begin} end {slice_end, row_end, col_end} while its shape is {mri_scan.shape} and crop shape {cropped_scan.shape}"
     if triage:
         print(cropped_scan.shape)
         return
@@ -201,6 +204,7 @@ def save_radiomics_data():
         radiomics_features_dict[scan_name] = df.loc[scan_name].values
     pickle.dump(radiomics_features_dict, open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'radiomics_all.pkl'), 'wb'))
 
+
 def pruge_nan_rows(feat_arr, labels_arr):
     # We should remove both feature and label entries for nan
     print(f"Original sizes are: features: {feat_arr.shape} and labels {labels_arr.shape}")
@@ -208,6 +212,7 @@ def pruge_nan_rows(feat_arr, labels_arr):
     feat_arr, labels_arr = feat_arr[~nan_indices], labels_arr[~nan_indices]
     print(f"Sizes after purging features: {feat_arr.shape} and labels {labels_arr.shape}")
     return feat_arr, labels_arr
+
 
 def train_val_radiomics_feat():
     labels_dict = read_radiomics_labels()
@@ -226,12 +231,12 @@ def train_val_radiomics_feat():
                                                                                split_indices=train_split_indices)
     # Similarly for the validation elements
     val_numpy_feat, val_numpy_labels, val_surviving_indices = purge_nans(labels_dict=labels_dict,
-                                                                               radiomics_features_dict=radiomics_features_dict,
-                                                                               split_indices=val_split_indices)
+                                                                         radiomics_features_dict=radiomics_features_dict,
+                                                                         split_indices=val_split_indices)
     # Similarly for the test elements
     test_numpy_feat, test_numpy_labels, test_surviving_indices = purge_nans(labels_dict=labels_dict,
-                                                                         radiomics_features_dict=radiomics_features_dict,
-                                                                         split_indices=test_split_indices)
+                                                                            radiomics_features_dict=radiomics_features_dict,
+                                                                            split_indices=test_split_indices)
     # Old code block. Hopefully, task already taken care of
     # Purge the nan entries
     # train_numpy_feat, train_numpy_labels = pruge_nan_rows(feat_arr=train_numpy_feat, labels_arr=train_numpy_labels)
@@ -245,7 +250,7 @@ def train_val_radiomics_feat():
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_feat.npy'), test_numpy_feat)
     np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'), test_numpy_labels)
     # Also store the labels dictionary since it would make our lives easier
-    pickle.dump(labels_dict, open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'labels_dict.npy'),'wb'))
+    pickle.dump(labels_dict, open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'labels_dict.npy'), 'wb'))
     # Finally, let us also update the label indices since we want to have the same consistant ones across radiomics
     # and SSL
     pickle.dump(train_surviving_indices, open(os.path.join(SPLIT_SAVE_FILE_PATH, 'train.pkl'), 'wb'))

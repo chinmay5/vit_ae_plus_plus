@@ -1,9 +1,7 @@
 import numpy as np
-from sklearn import svm, datasets
 import os
-from sklearn import metrics
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 
+from bootstrap.utils.classical_models import execute_models
 from environment_setup import PROJECT_ROOT_DIR
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -37,168 +35,78 @@ RADIOMICS_SAVE_FILE_PATH = os.path.join(BASE_DIR, 'mri_images', 'Duke-Breast-Can
 base_dir = '/mnt/cat/chinmay/brats_processed'
 
 
-def bootstrap():
-    # global train_numpy_feat, train_numpy_labels, val_numpy_feat, val_numpy_labels, test_numpy_feat, test_numpy_labels, epochs
-    train_numpy_feat = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_feat.npy'))
-    train_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_labels.npy'))
-    val_numpy_feat = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'val_feat.npy'))
-    val_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'val_labels.npy'))
-    test_numpy_feat = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_feat.npy'))
-    test_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'))
-    epochs = 45
-
+def bootstrap(option='radiomics', subtype=None):
     def normalize_features(numpy_arr):
         for ii in range(np.shape(numpy_arr)[1]):
             #    radiomics[:, ii] = z_score_normalize(radiomics[:, ii])
             numpy_arr[:, ii] = min_max_normalize(numpy_arr[:, ii], 1)
 
+    if option == 'radiomics':
+        train_numpy_feat = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_feat.npy'))
+        train_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_labels.npy'))
+        test_numpy_feat = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_feat.npy'))
+        test_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'))
+
+    elif option == 'ssl':
+        assert subtype is not None, "Please specify the subtype: perc, contrast etc"
+        ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'breast_cancer', 'ssl_features_dir', subtype)  # Add subtype later on
+        train_numpy_feat = np.load(os.path.join(ssl_feature_dir, 'features.npy'))
+        test_numpy_feat = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+        train_numpy_labels = np.load(os.path.join(ssl_feature_dir, 'gt_labels.npy'))
+        test_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'))
+    elif option == 'combined':
+        assert subtype is not None, "Please specify the subtype: perc, contrast etc"
+        ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'breast_cancer', 'ssl_features_dir', subtype)  # Add subtype later on
+        train_numpy_feat_ssl = np.load(os.path.join(ssl_feature_dir, 'features.npy'))
+        test_numpy_feat_ssl = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+        train_numpy_feat = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_feat.npy'))
+        train_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'train_labels.npy'))
+        test_numpy_feat = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_feat.npy'))
+        test_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'))
+        train_numpy_feat = np.concatenate([train_numpy_feat, train_numpy_feat_ssl], axis=1)
+        test_numpy_feat = np.concatenate([test_numpy_feat, test_numpy_feat_ssl], axis=1)
+
+    else:
+        raise AttributeError(f"Invalid option {option} used")
+
+
     normalize_features(train_numpy_feat)
-    normalize_features(val_numpy_feat)
     normalize_features(test_numpy_feat)
-    # Using a combination of train and val split as the train split. The val split should be used in order to get the hyper-parameters
-    # train_numpy_feat = np.concatenate((train_numpy_feat, val_numpy_feat), axis=0)
-    # train_numpy_labels = np.concatenate((train_numpy_labels, val_numpy_labels), axis=0)
 
     print(f"Number of train samples: {train_numpy_feat.shape[0]} and test samples: {test_numpy_feat.shape[0]}")
     return train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels
 
 
-# We need to also convert the classification task into
-def classification(train_features, train_label, test_features):
-    # clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear', random_state=42)
-    # clf.fit(train_features, train_label)
-
-    param_grid = {'C': [0.1, 1, 10, 100, 1000],
-                  'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
-                  'kernel': ['rbf']}
-
-    grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42), param_grid, refit=True, verbose=3)
-
-    # fitting the model for grid search
-    grid.fit(train_features, train_label)
-    # print best parameter after tuning
-    print(grid.best_params_)
-
-    # print how our model looks after hyper-parameter tuning
-    print(grid.best_estimator_)
-    pred = grid.predict_proba(test_features)
-
-    # pred = clf.predict_proba(test_features)
-    return pred
-
-
-# temp_pred_rad = classification(train_features=train_numpy_feat, train_label=train_numpy_labels,
-#                                test_features=test_numpy_feat)
-#
-# print(f"Number of train samples: {train_numpy_feat.shape[0]} and test samples: {test_numpy_feat.shape[0]}")
-#
-# temp_label = test_numpy_labels
-# temp_pred_rad = temp_pred_rad[:, 1]
-#
-# # fig = plt.figure(1)
-# # plot = fig.add_subplot(111)
-# # fpr, tpr, _ = metrics.roc_curve(temp_label,  temp_pred_rad)
-# # auc = metrics.roc_auc_score(temp_label, temp_pred_rad)
-# # plt.plot(fpr,tpr,label="trad. radiomics, AUC = "+str(auc)[0:5])
-# # plt.legend(loc=4, prop={'size': 12})
-#
-# temp_pred_rad_ = temp_pred_rad
-# temp_pred_rad[temp_pred_rad >= 0.5] = 1
-# temp_pred_rad[temp_pred_rad < 0.5] = 0
-# cm = confusion_matrix(temp_pred_rad, temp_label)
-# print(cm)
-# specificity = cm[0, 0] / (cm[0, 0] + cm[1, 0])
-# print('Radiomics alone:')
-# print('specificity:', specificity)
-# sensitivity = cm[1, 1] / (cm[1, 1] + cm[0, 1])
-# print('sensitivity:', sensitivity)
-
-
-
-# fig = plt.figure(1)
-# plot = fig.add_subplot(111)
-# fpr, tpr, _ = metrics.roc_curve(temp_label,  temp_pred_rad)
-# auc = metrics.roc_auc_score(temp_label, temp_pred_rad)
-# plt.plot(fpr,tpr,label="trad. radiomics, AUC = "+str(auc)[0:5])
-# plt.legend(loc=4, prop={'size': 12})
-
 def evaluate_results(pred, label):
     pred[pred >= 0.5] = 1
     pred[pred < 0.5] = 0
     cm = confusion_matrix(pred, label)
-    print(cm)
     specificity = cm[0, 0] / (cm[0, 0] + cm[1, 0])
-    print('Radiomics alone:')
-    print('specificity:', specificity)
     sensitivity = cm[1, 1] / (cm[1, 1] + cm[0, 1])
-    print('sensitivity:', sensitivity)
+    return specificity, sensitivity, cm
 
-
-# temp_label = test_numpy_labels
-# temp_pred_rad = temp_pred_rad[:, 1]
-def evaluate_radiomics_baseline(train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels):
-    pred_rad = classification(train_features=train_numpy_feat, train_label=train_numpy_labels,
-                                   test_features=test_numpy_feat)
-    pred_rad = pred_rad[:, 1]
-    evaluate_results(pred=pred_rad, label=test_numpy_labels)
+def evaluate_models(train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels):
+    results = execute_models(train_numpy_feat, train_numpy_labels, test_numpy_feat, 'svm', 'rf', 'linear')
+    for method, preds in results.items():
+        preds = preds[:, 1]
+        specificity, sensitivity, cm = evaluate_results(pred=preds, label=test_numpy_labels)
+        print(f"Method: {method}, \n Specificity: {specificity}, \n Sensitivity: {sensitivity}\n {cm}")
 
 
 #############################################################################################################
 
-# # Bran's SSL features
-# print("THIS IS BRAN'S CODE IN ACTION!!!!!!!!!!!!!!!!!!")
-# train_X_vit = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'iter_3000_breast_training.npy'))
-# test_X_vit = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'iter_3000_breast_test.npy'))
-# # TODO: Should we load train_y_ from our splits???
-# # Normalize the features
-# for ii in range(np.shape(train_X_vit)[1]):
-#     train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
-#     test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
-#
-# temp_pred_vit = classification(train_features=train_X_vit, train_label=train_numpy_labels, test_features=test_X_vit)
-# temp_pred_vit = temp_pred_vit[:, 1]
-#
-#
-#
-# temp_pred_vit[temp_pred_vit>=0.5] = 1
-# temp_pred_vit[temp_pred_vit<0.5] = 0
-# cm = confusion_matrix(temp_pred_vit, temp_label)
-# print(cm)
-# specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
-# print('SSL:')
-# print('specificity:', specificity)
-# sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
-# print('sensitivity:', sensitivity)
-#
-#
-# print("SWITCHING TO MY CODE!!!!!!!!!")
-#
-# # TODO: Maybe include the plotting etc later
-# ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'breast_cancer', 'ssl_features_dir')
-# train_X_vit = np.load(os.path.join(ssl_feature_dir, 'features.npy'))
-# test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
-# # TODO: Should we load train_y_ from our splits???
-# # Normalize the features
-# for ii in range(np.shape(train_X_vit)[1]):
-#     train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
-#     test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
-#
-# temp_pred_vit = classification(train_features=train_X_vit, train_label=train_numpy_labels, test_features=test_X_vit)
-# temp_pred_vit = temp_pred_vit[:, 1]
-#
-#
-#
-# temp_pred_vit[temp_pred_vit>=0.5] = 1
-# temp_pred_vit[temp_pred_vit<0.5] = 0
-# cm = confusion_matrix(temp_pred_vit, temp_label)
-# print(cm)
-# specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
-# print('SSL:')
-# print('specificity:', specificity)
-# sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
-# print('sensitivity:', sensitivity)
-
 if __name__ == '__main__':
-    train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels = bootstrap()
-    evaluate_radiomics_baseline(train_numpy_feat=train_numpy_feat, train_numpy_labels=train_numpy_labels,
-                                test_numpy_feat=test_numpy_feat, test_numpy_labels=test_numpy_labels)
+    print("---------RADIOMICS ALONE---------")
+    train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels = bootstrap(option='radiomics')
+    evaluate_models(train_numpy_feat=train_numpy_feat, train_numpy_labels=train_numpy_labels,
+                    test_numpy_feat=test_numpy_feat, test_numpy_labels=test_numpy_labels)
+
+    print("---------SSL ALONE---------")
+    train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels = bootstrap(option='ssl', subtype='contrast')
+    evaluate_models(train_numpy_feat=train_numpy_feat, train_numpy_labels=train_numpy_labels,
+                    test_numpy_feat=test_numpy_feat, test_numpy_labels=test_numpy_labels)
+
+    print("---------COMBINED FEATURES---------")
+    train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels = bootstrap(option='combined', subtype='contrast')
+    evaluate_models(train_numpy_feat=train_numpy_feat, train_numpy_labels=train_numpy_labels,
+                    test_numpy_feat=test_numpy_feat, test_numpy_labels=test_numpy_labels)

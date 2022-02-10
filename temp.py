@@ -55,14 +55,12 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
 
 def check_temp_param_effect():
-    x = np.arange(0, 10, 0.1)
-    temp = [0, 0.4, 0.8, 1.2, 1.6, 2.0]
+    temp = [0.01, 0.1, 1, 10, 100]
+    logits = np.asarray([-0.4, -0.2, 0.2, 0.4, 1, 2.0])
     for t in temp:
-        exp_x = np.exp(x / t)
-        vals = exp_x / exp_x.sum()
-        plt.plot(vals, label=f'temperature: {t}')
-    plt.legend(loc='best')
-    plt.show()
+        expos = np.sum(np.exp(logits * t))
+        prob = np.exp(logits* t)/ expos
+        print(f"For temperature {1/t} the probability is {prob}")
 
 
 def plot_f_x():

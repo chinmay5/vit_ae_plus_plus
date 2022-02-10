@@ -38,11 +38,12 @@ class FlairData(Dataset):
         volume = torch.as_tensor(np.load(os.path.join(img_path, f"{file_name}.npy")), dtype=torch.float)
         # We add channel dimension to the input. Perhaps a step missed during pre-processing
         volume.unsqueeze_(0)
+        original_volume = volume.clone()
         if self.transform is not None:
             volume = self.transform(volume)
         # If we normalize first and then apply transforms, the range of input values is changed to exceed the limits
         volume = self._normalize_data(volume)
-        return volume, torch.tensor(self.labels_dict[file_name])
+        return volume, original_volume, torch.tensor(self.labels_dict[file_name])
 
     def __str__(self):
         return f"Pre-train Flair MRI data with transforms = {self.transform}"
@@ -86,7 +87,7 @@ if __name__ == '__main__':
     data_loader = torch.utils.data.DataLoader(data, batch_size=4)
     min_val, max_val = float("inf"), 0
 
-    for batch_data, _ in data_loader:
+    for batch_data, _, _ in data_loader:
         if batch_data.max() > max_val:
             max_val = batch_data.max()
         if batch_data.min() < min_val:
@@ -97,7 +98,7 @@ if __name__ == '__main__':
     data_loader = torch.utils.data.DataLoader(train_data, batch_size=16)
     min_val, max_val = float("inf"), 0
     all_ones, total = 0, 0
-    for batch_data, labels in data_loader:
+    for batch_data, _, labels in data_loader:
         all_ones += labels.sum()
         total += labels.shape[0]
         if batch_data.max() > max_val:
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     test_data = build_dataset(mode='test')
     data_loader = torch.utils.data.DataLoader(test_data, batch_size=16)
     min_val, max_val = float("inf"), 0
-    for batch_data, labels in data_loader:
+    for batch_data, _, labels in data_loader:
         if batch_data.max() > max_val:
             max_val = batch_data.max()
         if batch_data.min() < min_val:

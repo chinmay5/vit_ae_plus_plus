@@ -6,7 +6,7 @@ from dataset.dataset_factory import get_dataset
 from read_configs import bootstrap
 from utils.used_metrics import roc_auc
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import sys
 from pathlib import Path
@@ -384,11 +384,6 @@ def main(args):
         # load pre-trained model
         msg = model.load_state_dict(checkpoint_model, strict=False)
         print(msg)
-
-        if args.global_pool:
-            assert set(msg.missing_keys) == {'head.weight', 'head.bias', 'fc_norm.weight', 'fc_norm.bias'}
-        else:
-            assert set(msg.missing_keys) == {'head.weight', 'head.bias'}
 
         # manually initialize fc layer
         # Let us fix the initial layers of the network such that only the classification head is fine tuned

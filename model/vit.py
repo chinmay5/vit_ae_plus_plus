@@ -214,6 +214,7 @@ class VisionTransformer3D(nn.Module):
 
         # Classifier head(s)
         self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+
         self.head_dist = None
         self.global_pool = global_pool
         if self.global_pool:
@@ -296,6 +297,34 @@ class VisionTransformer3D(nn.Module):
         return x
 
 
+
+class VisionTransformer3DContrastive(VisionTransformer3D):
+    def __init__(self, volume_size=224, patch_size=16, in_chans=3, num_classes=1000, embed_dim=768, depth=12,
+                 num_heads=12, mlp_ratio=4., qkv_bias=True, representation_size=None, distilled=False,
+                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0., embed_layer=PatchEmbed3D, norm_layer=None,
+                 act_layer=None, weight_init='', global_pool=False):
+        super(VisionTransformer3DContrastive, self).__init__(volume_size=volume_size, patch_size=patch_size, in_chans=in_chans, num_classes=num_classes, embed_dim=embed_dim, depth=depth,
+                 num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, representation_size=representation_size, distilled=distilled,
+                 drop_rate=drop_rate, attn_drop_rate=attn_drop_rate, drop_path_rate=drop_path_rate, embed_layer=embed_layer, norm_layer=norm_layer,
+                 act_layer=act_layer, weight_init=weight_init, global_pool=global_pool)
+        self.predictor = nn.Sequential(
+            nn.Linear(self.embed_dim, self.embed_dim, bias=False),
+            nn.BatchNorm1d(self.embed_dim),
+            nn.ReLU(inplace=True),  # hidden layer
+            nn.Linear(self.embed_dim, self.embed_dim)  # output layer
+        )
+
+
+    def forward(self, x1, x2):
+        # call the parent function for the two views
+        z1 = super(VisionTransformer3DContrastive, self).forward(x1)
+        z2 = super(VisionTransformer3DContrastive, self).forward(x2)
+        p1 = self.predictor(z1)
+        p2 = self.predictor(z2)
+        return p1, p2, z1.detach(), z2.detach()
+
+
+
 if __name__ == '__main__':
     image_size = (64, 64, 64)
     sample_img = torch.randn(8, 3, 64, 64, 64)
@@ -305,7 +334,7 @@ if __name__ == '__main__':
     # sample_img = sample_img.cuda()
     # output = model(sample_img)
     # print(output.shape)
-    embed = VisionTransformer3D(volume_size=image_size, in_chans=3)
-    output = embed(sample_img)
+    embed = VisionTransformer3DContrastive(volume_size=image_size, in_chans=3, num_classes=-1)
+    output, _, _, _ = embed(sample_img, sample_img)
     print(output.shape)
 

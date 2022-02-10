@@ -41,4 +41,6 @@ def bootstrap(args, key='SETUP'):
     args.feature_extractor_load_path = parser[key].get('feature_extractor_load_path', fallback="")
     args.eval_model_path = parser[key].get('eval_model_path', fallback="")
     args.use_mixup = parser[key].getboolean('use_mixup', fallback=False)
+    args.subtype = parser[key].get('subtype', fallback="")
+    args.nb_classes = parser[key].getint('nb_classes', fallback=2)
     return args
