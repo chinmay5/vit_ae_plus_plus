@@ -19,6 +19,14 @@ def roc_auc(predictions, target):
     return roc_auc_score(target_one_hot, predictions), specificity, sensitivity
 
 
+def acc_pred(predictions, target):
+    # Converting raw scores into probabilities
+    preds = torch.max(predictions, dim=1)[1]
+    correct = (preds == target).sum()
+    return correct/target.size(0)
+
+
+
 def find_vals(predictions, target):
     predictions = torch.max(predictions, dim=1)[1]  # We need the indices for the max
     print(predictions)
@@ -39,8 +47,13 @@ if __name__ == '__main__':
     # enc.fit(possible_labels)
     # y = enc.transform(y).toarray()
     # print(y)
-    x = torch.randn((4, 2))
+    # x = torch.randn((4, 2))
+    x = torch.as_tensor([
+        [0.9, 0.1],
+        [0.9, 2.1],
+        [0.9, 2.1],
+        [0.9, 0.1]
+    ])
     # y = torch.as_tensor(y).squeeze()
     y = torch.as_tensor(y)
-    print(roc_auc(x, y))
-    print(find_vals(x, y))
+    print(acc_pred(x, y))

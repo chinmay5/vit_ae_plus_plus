@@ -46,4 +46,5 @@ def bootstrap(args, key='SETUP'):
     args.use_proj = parser[key].getboolean('use_proj', fallback=False)
     args.selection_type = parser['DATASET'].get('selection_type')
     args.mode = parser['DATASET'].get('mode')
+    args.num_classes = parser['DATASET'].getint('num_classes')
     return args
