@@ -68,24 +68,12 @@ def main(args):
     cudnn.benchmark = True
 
     args = bootstrap(args=args, key='EXTRACT_SSL')
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=None,
-                                use_z_score=args.use_z_score)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='labels', args=args, transforms=None,
                                use_z_score=args.use_z_score)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
     os.makedirs(ssl_feature_dir, exist_ok=True)
-
-    sampler_train = torch.utils.data.RandomSampler(dataset_train)
-
-    data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        pin_memory=args.pin_mem,
-        drop_last=False,
-    )
 
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test,
@@ -129,12 +117,8 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    generate_features(data_loader_train, model, device, log_writer=train_writer, ssl_feature_dir=ssl_feature_dir)
     generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None,
                       ssl_feature_dir=ssl_feature_dir)
-    # Also, let us save the vit model. We need not go through the entire process of getting the vit from autoenc everytime
-    # ssl_file_name = os.path.join(PROJECT_ROOT_DIR, args.output_dir, 'checkpoints', 'ssl_feat.pth')
-    # torch.save(model.state_dict(), ssl_file_name)
 
 
 if __name__ == '__main__':
