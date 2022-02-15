@@ -43,4 +43,7 @@ def bootstrap(args, key='SETUP'):
     args.use_mixup = parser[key].getboolean('use_mixup', fallback=False)
     args.subtype = parser[key].get('subtype', fallback="")
     args.nb_classes = parser[key].getint('nb_classes', fallback=2)
+    args.use_proj = parser[key].getboolean('use_proj', fallback=False)
+    args.selection_type = parser['DATASET'].get('selection_type')
+    args.mode = parser['DATASET'].get('mode')
     return args

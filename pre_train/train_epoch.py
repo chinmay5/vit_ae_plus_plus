@@ -221,7 +221,7 @@ def main(args):
     transformations = tio.Compose(transforms)
     # TODO: Evaluate the effects better
     args = bootstrap(args=args, key='SETUP')
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=transformations, use_z_score=args.use_z_score)
+    dataset_train = get_dataset(dataset_name=args.dataset, mode=args.mode, args=args, transforms=transformations, use_z_score=args.use_z_score)
     print(dataset_train)
 
     if False:  # args.distributed:
@@ -288,6 +288,7 @@ def main(args):
     print(f"Start training for {args.epochs} epochs")
 
     start_time = time.time()
+    min_loss = float('inf')
     for epoch in range(args.start_epoch, args.epochs):
         # loss weighting for the edge maps
         edge_map_weight = 0.01 * (1 - epoch/args.epochs)
@@ -301,10 +302,15 @@ def main(args):
             edge_map_weight=edge_map_weight
         )
 
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 50 == 0 or epoch + 1 == args.epochs):
             misc.save_model(
                 args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
                 loss_scaler=loss_scaler, epoch=epoch)
+        if train_stats['loss'] < min_loss:
+            min_loss = train_stats['loss']
+            misc.save_model(
+                args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                loss_scaler=loss_scaler, epoch="min_loss")
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      'epoch': epoch, }

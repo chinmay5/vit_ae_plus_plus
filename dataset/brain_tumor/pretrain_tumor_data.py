@@ -51,7 +51,7 @@ class FlairData(Dataset):
 
 
 def build_dataset(mode, args=None, transforms=None, use_z_score=False):
-    assert mode in ['train', 'valid', 'test', 'feat_extract'], "Invalid Mode selected"
+    assert mode in ['train', 'valid', 'test', 'feat_extract', 'combined'], "Invalid Mode selected"
     if mode == 'feat_extract':
         # A special case where we simply use all the data in our feature extraction pipeline. So, no augmentations
         # and the split file would be combination of both train and val
@@ -62,6 +62,9 @@ def build_dataset(mode, args=None, transforms=None, use_z_score=False):
     elif mode == 'valid':
         filename = 'x_val_ssl.npy'
         label_name = 'y_val_ssl.npy'
+    elif mode == 'combined':
+        filename = 'combined_data.npy'
+        label_name = 'combined_labels.npy'
     else:
         # Because of assert security net, this is test mode
         filename = 'feature_extraction_test_x.npy'
@@ -79,13 +82,20 @@ if __name__ == '__main__':
     ]
     transformations = tio.Compose(transforms)
 
-    data = FlairData(transform=transformations, use_z_score=True)
-    sample = data[0]
-    print(sample.shape)
+    # all_elements = ['x_train_ssl.npy', 'x_val_ssl.npy', 'feature_extraction_test_x.npy']
+    # combined_data = []
+    # for elem in all_elements:
+    #     data_raw = np.load(os.path.join(BASE_PATH, elem))
+    #     combined_data.append(data_raw)
+    # combined = np.concatenate(combined_data)
+    # np.save(os.path.join(BASE_PATH, 'combined_data.npy'), combined)
+
+    data = build_dataset(mode='combined')
+    print(len(data))
     data_loader = torch.utils.data.DataLoader(data, batch_size=4)
     min_val, max_val = float("inf"), 0
 
-    for batch_data in data_loader:
+    for batch_data, label in data_loader:
         if batch_data.max() > max_val:
             max_val = batch_data.max()
         if batch_data.min() < min_val:

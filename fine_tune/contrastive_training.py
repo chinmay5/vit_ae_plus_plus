@@ -6,7 +6,7 @@ from dataset.dataset_factory import get_dataset
 from read_configs import bootstrap
 from utils.feature_extraction import generate_features
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import sys
 
@@ -53,7 +53,7 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 
         augmented = augmented.to(device, non_blocking=True)
         original = original.to(device, non_blocking=True)
-
+        # print(data_iter_step, accum_iter)
         with torch.cuda.amp.autocast():
             p1, p2, z1, z2 = model(original, augmented)
             loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
@@ -192,16 +192,16 @@ def main(args):
     ]
     args = bootstrap(args=args, key='CONTRASTIVE')
     train_transforms = tio.Compose(transforms)
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms,
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='ssl', args=args, transforms=train_transforms,
                                 use_z_score=args.use_z_score)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='labels', args=args, transforms=None,
                                use_z_score=args.use_z_score)
     sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
     if args.log_dir is not None:
         args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
         os.makedirs(args.log_dir, exist_ok=True)
-        log_writer_train = SummaryWriter(log_dir=f"{args.log_dir}/train_ft")
+        log_writer_train = SummaryWriter(log_dir=f"{args.log_dir}/train_contrast")
 
     data_loader_train = torch.utils.data.DataLoader(
         dataset_train, sampler=sampler_train,
@@ -226,17 +226,8 @@ def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.eval:
-        # if we are in feature-extraction mode, then we do not want to perform any augmentation on the inputs
-        dataset_train_no_aug = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms,
-                                    use_z_score=args.use_z_score)
-        data_loader_train = torch.utils.data.DataLoader(
-            dataset_train_no_aug, sampler=sampler_train,
-            batch_size=args.batch_size,
-            num_workers=args.num_workers,
-            pin_memory=args.pin_mem,
-            drop_last=False,
-        )
-        extract_features(args=args, data_loader_train=data_loader_train, data_loader_test=data_loader_test,
+        # if we are in feature-extraction mode, we only want to work with samples that have associated labels
+        extract_features(args=args, data_loader_test=data_loader_test,
                          device=device, model=model, log_writer_train=log_writer_train)
         exit(0)
 
@@ -331,8 +322,6 @@ def extract_features(args, data_loader_train, data_loader_test, device, model, l
     model.to(device)
     contrastive_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
     os.makedirs(contrastive_feature_dir, exist_ok=True)
-    generate_features(data_loader_train, model, device, log_writer=log_writer_train,
-                      ssl_feature_dir=contrastive_feature_dir)
     generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None,
                       ssl_feature_dir=contrastive_feature_dir)
 

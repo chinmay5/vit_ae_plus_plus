@@ -195,6 +195,16 @@ def read_radiomics_labels():
     return labels_dict
 
 
+def read_custom_labels(cols, label_converter):
+    filename = os.path.join(META_DATA_DIR, 'Clinical_and_Other_Features.xlsx')
+    label_df = pd.read_excel(filename, engine='openpyxl', skiprows=[0, 2], usecols=cols, converters=label_converter,
+                             index_col=0)
+    labels_dict = {}
+    for scan_name in tqdm(label_df.index):
+        labels_dict[scan_name] = label_df.loc[scan_name].item()
+    return labels_dict
+
+
 def save_radiomics_data():
     filename = os.path.join(META_DATA_DIR, 'Imaging_Features.xlsx')
     df = pd.read_excel(filename, engine='openpyxl',
@@ -274,6 +284,77 @@ def purge_nans(labels_dict, radiomics_features_dict, split_indices):
     return numpy_feat, numpy_labels, surviving_indices
 
 
+def get_ssl_items(label_name='Clinical Response, Evaluated Through Imaging ', filename='clinical'):
+    use_cols = ['Patient ID', label_name]
+    label_converter = {
+        'Patient ID': str,
+        label_name: int
+    }
+
+    labels_dict = read_custom_labels(cols=use_cols, label_converter=label_converter)
+    # We get nan values as the missing entries. We can filter away the missing values now.
+    ssl_mri_scans = []
+    downstream_scans = []
+    for name, label in labels_dict.items():
+        if np.isnan(label):
+            ssl_mri_scans.append(name)
+        else:
+            label = label - 1  # Since we want labels to start from 0
+            downstream_scans.append((name, label))
+    # Some sanity checks
+    ssl_set, downstream_set = set(ssl_mri_scans), set([x[0] for x in downstream_scans])
+    assert len(ssl_set.intersection(downstream_set)) == 0, "Something wrong with the splitting, Aborting"
+    # Let us quickly remove suuch scans that we had issues in pre-processing
+    print("Processing SSL Files")
+    ssl_mri_scans = choose_valid(SAVE_PATH, ssl_mri_scans, has_labels=False)
+    print("Processing Label Files")
+    downstream_scans = choose_valid(SAVE_PATH, downstream_scans, has_labels=True)
+    pickle.dump(ssl_mri_scans, open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_ssl.pkl'), 'wb'))
+    pickle.dump(downstream_scans, open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_annotated_mit_labels.pkl'), 'wb'))
+
+
+def create_numpy_for_downstream(filename='clinical'):
+    # Let us take this opportunity to also save the radiomics features as a numpy array. This makes it easier to use the model
+    # in classical ML models.
+    downstream_scans = pickle.load(open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_annotated_mit_labels.pkl'), 'rb'))
+    radiomics_features_dict = pickle.load(open(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'radiomics_all.pkl'), 'rb'))
+    print(f"Original shape {len(downstream_scans)}")
+    numpy_feat = []
+    numpy_labels = []
+    surviving_indices = []
+    for scan, label in downstream_scans:
+        features = radiomics_features_dict[scan]
+        if np.any(np.isnan(features)):
+            continue
+        surviving_indices.append((scan, label))
+        numpy_feat.append(radiomics_features_dict[scan])
+        numpy_labels.append(label)
+    numpy_feat = np.stack(numpy_feat)
+    numpy_labels = np.stack(numpy_labels)
+    print(f"final shape {numpy_feat.shape[0]}")
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, f'{filename}_features_all.npy'), numpy_feat)
+    np.save(os.path.join(RADIOMICS_SAVE_FILE_PATH, f'{filename}_labels_all.npy'), numpy_labels)
+    pickle.dump(surviving_indices, open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_annotated_mit_labels_purged.pkl'), 'wb'))
+    print(f"Processing completed for {filename}")
+
+
+
+def choose_valid(img_path, mri_scans, has_labels):
+    valid_scans = []
+    for scan in mri_scans:
+        try:
+            if has_labels:
+                scan, label = scan
+                _ = np.load(os.path.join(img_path, f"{scan}.npy"))
+                valid_scans.append((scan, label))
+            else:
+                _ = np.load(os.path.join(img_path, f"{scan}.npy"))
+                valid_scans.append(scan)
+        except FileNotFoundError as e:
+            print(f"Skipping!!! {e}")
+    return valid_scans
+
+
 def train_val_test_splits():
     files = os.listdir(os.path.join(SAVE_PATH))
     random.seed(42)
@@ -302,13 +383,17 @@ def bootstrap_setup():
 
 
 if __name__ == '__main__':
-    # tumor_data_file = os.path.join(META_DATA_DIR, 'Clinical_and_Other_Features.xlsx')
-    # read_file(tumor_data_file)
-    process_all_scans()
-    handle_bad_files_from_first_round()
-    sanity_check_fur_scan_shapes()
+    tumor_data_file = os.path.join(META_DATA_DIR, 'Clinical_and_Other_Features.xlsx')
+    # see_all_cols(tumor_data_file)
+    # get_ssl_items(label_name='Clinical Response, Evaluated Through Imaging ', filename='clinical')
+    # get_ssl_items(label_name='Pathologic Response to Neoadjuvant Therapy', filename='pathology')
+    create_numpy_for_downstream(filename='clinical')
+    create_numpy_for_downstream(filename='pathology')
+    # process_all_scans()
+    # handle_bad_files_from_first_round()
+    # sanity_check_fur_scan_shapes()
     # process_single_scan(scan_name='Breast_MRI_001', triage=False)
     # pickle.dump(bad_files, open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'wb'))
 
     # pickle.dump(bad_files, open(os.path.join(PROJECT_ROOT_DIR, 'bad_files.pkl'), 'wb'))
-    bootstrap_setup()
+    # bootstrap_setup()

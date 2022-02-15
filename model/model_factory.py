@@ -17,6 +17,6 @@ def get_models(model_name, args):
         return VisionTransformer3DContrastive(volume_size=args.volume_size, in_chans=args.in_channels, num_classes=args.nb_classes,
                                    patch_size=args.patch_size, global_pool=args.global_pool,
                                    norm_layer=partial(nn.LayerNorm, eps=1e-6),
-                                   drop_path_rate=args.drop_path)
+                                   drop_path_rate=args.drop_path, use_proj=args.use_proj)
     else:
         raise NotImplementedError("Only AE model supported till now")
