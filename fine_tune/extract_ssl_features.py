@@ -85,7 +85,6 @@ def main(args):
 
     model = get_models(model_name='vit', args=args)
     args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
-    train_writer = SummaryWriter(args.log_dir)
 
     args.finetune = os.path.join(PROJECT_ROOT_DIR, args.feature_extractor_load_path, "checkpoints", args.checkpoint)
     checkpoint = torch.load(args.finetune, map_location='cpu')
@@ -117,7 +116,7 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None,
+    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name='test_ssl_labels.npy',
                       ssl_feature_dir=ssl_feature_dir)
 
 

@@ -51,11 +51,9 @@ def bootstrap(option='radiomics', subtype=None, filename="clinical"):
 
     elif option == 'ssl':
         assert subtype is not None, "Please specify the subtype: perc, contrast etc"
-        ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, '', 'ssl_features_dir', subtype)  # Add subtype later on
-        train_numpy_feat = np.load(os.path.join(ssl_feature_dir, 'features.npy'))
-        test_numpy_feat = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
-        train_numpy_labels = np.load(os.path.join(ssl_feature_dir, 'gt_labels.npy'))
-        test_numpy_labels = np.load(os.path.join(RADIOMICS_SAVE_FILE_PATH, 'test_labels.npy'))
+        ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'breast_cancer', 'ssl_features_dir', subtype)  # Add subtype later on
+        features = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+        labels = np.load(os.path.join(ssl_feature_dir, 'test_ssl_labels.npy'))
     elif option == 'combined':
         assert subtype is not None, "Please specify the subtype: perc, contrast etc"
         ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, '', 'ssl_features_dir', subtype)  # Add subtype later on
@@ -74,7 +72,7 @@ def bootstrap(option='radiomics', subtype=None, filename="clinical"):
 
     normalize_features(features)
 
-    print(f"Number of train samples: {features.shape[0]} and test samples: {labels.shape[0]}")
+    print(f"Number of train samples: {features.shape[0]}")
     return features, labels
 
 
@@ -125,18 +123,17 @@ def evaluate_models(features, labels):
 #############################################################################################################
 
 if __name__ == '__main__':
-    print("---------RADIOMICS ALONE---------")
-    features, labels = bootstrap(option='radiomics', filename='clinical')
-    evaluate_models(features=features, labels=labels)
+    # print("---------RADIOMICS ALONE---------")
+    # features, labels = bootstrap(option='radiomics', filename='clinical')
+    # evaluate_models(features=features, labels=labels)
 
     # features, labels = bootstrap(option='radiomics', filename='pathology')
     # evaluate_models(features=features, labels=labels)
 
-    # print("---------SSL ALONE---------")
-    # train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels = bootstrap(option='ssl', subtype='contrast_no_l2')
-    # evaluate_models(train_numpy_feat=train_numpy_feat, train_numpy_labels=train_numpy_labels,
-    #                 test_numpy_feat=test_numpy_feat, test_numpy_labels=test_numpy_labels)
-    #
+    print("---------SSL ALONE---------")
+    features, labels = bootstrap(option='ssl', subtype='clinical', filename='clinical')
+    evaluate_models(features=features, labels=labels)
+
     # print("---------COMBINED FEATURES---------")
     # train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels = bootstrap(option='combined', subtype='contrast_no_l2')
     # evaluate_models(train_numpy_feat=train_numpy_feat, train_numpy_labels=train_numpy_labels,
