@@ -3,13 +3,13 @@ from collections import defaultdict
 import numpy as np
 import os
 
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 
 from bootstrap.utils.classical_models import execute_models
 from environment_setup import PROJECT_ROOT_DIR
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-from sklearn.metrics import confusion_matrix, roc_auc_score
+from sklearn.metrics import confusion_matrix, roc_auc_score, classification_report
 
 
 def read_csv(name):
@@ -78,13 +78,10 @@ def bootstrap(option='radiomics', subtype=None, filename="clinical"):
     return features, labels
 
 
-def evaluate_results(pred, label):
-    pred[pred >= 0.5] = 1
-    pred[pred < 0.5] = 0
-    cm = confusion_matrix(pred, label)
-    specificity = cm[0, 0] / (cm[0, 0] + cm[1, 0])
-    sensitivity = cm[1, 1] / (cm[1, 1] + cm[0, 1])
-    return specificity, sensitivity, cm
+def evaluate_results(pred, label, target_names=['0', '1', '2']):
+    pred = np.argmax(pred, axis=1)
+    print(confusion_matrix(label, pred)) #(label, pred, target_names=target_names))
+    # return specificity, sensitivity, cm
 
 
 def process_k_fold_results(per_model_result_dict):
@@ -103,21 +100,27 @@ def process_k_fold_results(per_model_result_dict):
 
 
 def evaluate_models(features, labels):
-    kfold_splits = KFold(n_splits=5, random_state=None, shuffle=False)
-    per_model_result_dict = defaultdict(list)
-    for train_index, test_index in kfold_splits.split(features):
+    kfold_splits = StratifiedKFold(n_splits=5, random_state=None, shuffle=False)
+    per_model_pred_dict = defaultdict(list)
+    per_model_label_dict = defaultdict(list)
+    for train_index, test_index in kfold_splits.split(features, labels):
         # print("TRAIN:", train_index, "TEST:", test_index)
         X_train, X_test = features[train_index], features[test_index]
         y_train, y_test = labels[train_index], labels[test_index]
 
         results = execute_models(X_train, y_train, X_test, 'svm', 'rf', 'linear')
         for method, preds in results.items():
-            preds = preds[:, 1]
-            specificity, sensitivity, cm = evaluate_results(pred=preds, label=y_test)
-            # print(f"Method: {method}, \n Specificity: {specificity}, \n Sensitivity: {sensitivity}\n {cm}")
-            per_model_result_dict[method].append((specificity, sensitivity, cm))
+            per_model_pred_dict[method].append(preds)
+            per_model_label_dict[method].append(y_test)
+    # Convert individual ml-model predictions to numpy array for easy handling
+    for method, pred_list in per_model_pred_dict.items():
+        # TODO: Perhaps make a class that stores pred and label so that we need not do it in this "hacky" way
+        pred_arr = np.concatenate(pred_list)
+        label_arr = np.concatenate(per_model_label_dict[method])
+        print(f"Results for {method}")
+        evaluate_results(pred=pred_arr, label=label_arr)
+        # print(f"Method: {method}, \n Specificity: {specificity}, \n Sensitivity: {sensitivity}\n {cm}")
 
-    process_k_fold_results(per_model_result_dict)
 
 #############################################################################################################
 
@@ -126,8 +129,8 @@ if __name__ == '__main__':
     features, labels = bootstrap(option='radiomics', filename='clinical')
     evaluate_models(features=features, labels=labels)
 
-    features, labels = bootstrap(option='radiomics', filename='pathology')
-    evaluate_models(features=features, labels=labels)
+    # features, labels = bootstrap(option='radiomics', filename='pathology')
+    # evaluate_models(features=features, labels=labels)
 
     # print("---------SSL ALONE---------")
     # train_numpy_feat, train_numpy_labels, test_numpy_feat, test_numpy_labels = bootstrap(option='ssl', subtype='contrast_no_l2')

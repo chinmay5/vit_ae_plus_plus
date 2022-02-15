@@ -32,7 +32,7 @@ class SVMModel(MLModel):
                       'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
                       'kernel': ['linear']}
 
-        grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42), param_grid, refit=True, verbose=0,
+        grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42, class_weight='balanced'), param_grid, refit=True, verbose=0,
                                   random_state=42)
         # fitting the model for grid search
         grid.fit(train_features, train_label)
