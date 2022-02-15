@@ -228,8 +228,10 @@ class MaskedAutoencoderViT(nn.Module):
         with torch.no_grad():
             # percep_loss = 10 * self.perceptual_loss(pred_vol, target_vol)
             percep_loss = self.perceptual_loss(pred_vol, target_vol)
-        loss = edge_map_weight * edge_map_loss + reconstruction_loss + percep_loss
-        return [loss, edge_map_loss, reconstruction_loss, percep_loss]
+        # loss = edge_map_weight * edge_map_loss + reconstruction_loss + percep_loss
+        loss = reconstruction_loss
+        # return [loss, edge_map_loss, reconstruction_loss, percep_loss]
+        return [loss, 0, reconstruction_loss, 0]
 
 
     # def get_weighted_loss(self, pred, target, mask, edge_map_weight=0):
