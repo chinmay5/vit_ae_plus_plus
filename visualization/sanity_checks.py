@@ -136,7 +136,7 @@ def main(args):
     args = bootstrap(args=args, key='SANITY')
 
     dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, use_z_score=args.use_z_score)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='valid', args=args, use_z_score=args.use_z_score)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, use_z_score=args.use_z_score)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir')
@@ -162,7 +162,7 @@ def main(args):
 
     model = get_models(model_name='autoenc', args=args)
     args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
-    train_writer = SummaryWriter(args.log_dir)
+    test_writer = SummaryWriter(args.log_dir)
 
     args.finetune = os.path.join(args.output_dir, "checkpoints", args.checkpoint)
 
@@ -186,11 +186,9 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    check_reconstruction(data_loader_train, model, device, log_writer=train_writer)
-    check_reconstruction(data_loader_test, model, device)
-    # Also, let us save the vit model. We need not go through the entire process of getting the vit from autoenc everytime
-    ssl_file_name = os.path.join(PROJECT_ROOT_DIR, args.output_dir, 'checkpoints', 'ssl_feat.pth')
-    torch.save(model.state_dict(), ssl_file_name)
+    check_reconstruction(data_loader_train, model, device, log_writer=None)
+    check_reconstruction(data_loader_test, model, device, log_writer=test_writer)
+
 
 
 if __name__ == '__main__':

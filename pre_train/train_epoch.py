@@ -163,22 +163,12 @@ def get_args_parser():
     parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
                         help='epochs to warmup LR')
 
-    # Dataset parameters
-    # parser.add_argument('--dataset', default='brats', type=str,
-    #                     help='dataset name')
-
-    # parser.add_argument('--output_dir', default='output_dir',
-    #                     help='path where to save, empty for no saving')
-    # parser.add_argument('--log_dir', default='output_dir',
-    #                     help='path where to tensorboard log')
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--resume', default='',
                         help='resume from checkpoint')
 
-    # parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
-    #                     help='start epoch')
     parser.add_argument('--num_workers', default=8, type=int)
     parser.add_argument('--pin_mem', action='store_true',
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
@@ -224,16 +214,7 @@ def main(args):
     dataset_train = get_dataset(dataset_name=args.dataset, mode=args.mode, args=args, transforms=transformations, use_z_score=args.use_z_score)
     print(dataset_train)
 
-    if False:  # args.distributed:
-        num_tasks = misc.get_world_size()
-        global_rank = misc.get_rank()
-        sampler_train = torch.utils.data.DistributedSampler(
-            dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
-        )
-        print("Sampler_train = %s" % str(sampler_train))
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-
+    sampler_train = torch.utils.data.RandomSampler(dataset_train)
     # if global_rank == 0 and args.log_dir is not None:
     if args.log_dir is not None:
         log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir, 'logs')
