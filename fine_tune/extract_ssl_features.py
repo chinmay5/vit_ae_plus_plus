@@ -1,20 +1,17 @@
 import argparse
 import os
 
-from tqdm import tqdm
-
 from dataset.dataset_factory import get_dataset
 from read_configs import bootstrap
 from utils.feature_extraction import generate_features
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 import numpy as np
 import torch
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
 
-from dataset.brain_tumor.pretrain_tumor_data import build_dataset
 from environment_setup import PROJECT_ROOT_DIR
 from model.model_factory import get_models
 from model.model_utils.vit_helpers import interpolate_pos_embed
@@ -68,12 +65,22 @@ def main(args):
     cudnn.benchmark = True
 
     args = bootstrap(args=args, key='EXTRACT_SSL')
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='labels', args=args, transforms=None,
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=None,
+                                use_z_score=args.use_z_score)
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
                                use_z_score=args.use_z_score)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
     os.makedirs(ssl_feature_dir, exist_ok=True)
+
+    data_loader_train = torch.utils.data.DataLoader(
+        dataset_train,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        pin_memory=args.pin_mem,
+        drop_last=False,
+    )
 
     data_loader_test = torch.utils.data.DataLoader(
         dataset_test,
@@ -116,7 +123,11 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name='test_ssl_labels.npy',
+    generate_features(data_loader_train, model, device, feature_file_name='train_ssl_features.npy',
+                      label_file_name='train_ssl_labels.npy',
+                      ssl_feature_dir=ssl_feature_dir)
+    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy',
+                      label_file_name='test_ssl_labels.npy',
                       ssl_feature_dir=ssl_feature_dir)
 
 

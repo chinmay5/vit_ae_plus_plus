@@ -72,11 +72,6 @@ def check_reconstruction(data_loader, model, device, log_writer=None):
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE ssl feature extraction module', add_help=False)
-    # parser.add_argument('--batch_size', default=4, type=int,
-    #                     help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    # parser.add_argument('--dataset', default='brats', type=str,
-    #                     help='dataset name')
-    # Model parameters
     parser.add_argument('--model', default='mae_vit_base_patch16', type=str, metavar='MODEL',
                         help='Name of model to train')
 
@@ -85,9 +80,6 @@ def get_args_parser():
 
     parser.add_argument('--in_channels', default=1, type=int,
                         help='Number of channels in the input')
-
-    # parser.add_argument('--patch_size', default=8, type=int,
-    #                     help='Patch size for dividing the input')
 
     # * Finetuning params
     parser.add_argument('--global_pool', action='store_true')
@@ -105,8 +97,6 @@ def get_args_parser():
     parser.add_argument('--seed', default=32, type=int)
     parser.add_argument('--resume', default='', help='resume from checkpoint')
 
-    # parser.add_argument('--start_epoch', default=0, type=int, metavar='N',
-    #                     help='start epoch')
     parser.add_argument('--eval', action='store_true',
                         help='Perform evaluation only')
     parser.add_argument('--dist_eval', action='store_true', default=False,
@@ -188,7 +178,6 @@ def main(args):
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
     check_reconstruction(data_loader_train, model, device, log_writer=None)
     check_reconstruction(data_loader_test, model, device, log_writer=test_writer)
-
 
 
 if __name__ == '__main__':
