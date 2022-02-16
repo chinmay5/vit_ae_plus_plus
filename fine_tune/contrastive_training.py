@@ -1,33 +1,28 @@
 import argparse
+import datetime
 import math
 import os
-
-from dataset.dataset_factory import get_dataset
-from read_configs import bootstrap
-from utils.feature_extraction import generate_features
-
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-
 import sys
+import time
 
 import numpy as np
 import torch
+import torchio as tio
 from torch.backends import cudnn
-import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 
-from model.model_utils.vit_helpers import interpolate_pos_embed
-
+import utils.lr_decay as lrd
+from dataset.dataset_factory import get_dataset
+from environment_setup import PROJECT_ROOT_DIR
 from model.model_factory import get_models
-
+from model.model_utils.vit_helpers import interpolate_pos_embed
+from read_configs import bootstrap
 from utils import misc, lr_sched
+from utils.feature_extraction import generate_features
 from utils.misc import NativeScalerWithGradNormCount as NativeScaler
 
-from torch.utils.tensorboard import SummaryWriter
-from environment_setup import PROJECT_ROOT_DIR
-import utils.lr_decay as lrd
-import time
-import datetime
-import torchio as tio
+
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 
 def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, loss_scaler,
@@ -99,8 +94,6 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE fine-tuning for image classification', add_help=False)
-    # parser.add_argument('--batch_size', default=4, type=int,
-    #                     help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
@@ -192,9 +185,9 @@ def main(args):
     ]
     args = bootstrap(args=args, key='CONTRASTIVE')
     train_transforms = tio.Compose(transforms)
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='ssl', args=args, transforms=train_transforms,
+    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms,
                                 use_z_score=args.use_z_score)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='labels', args=args, transforms=None,
+    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
                                use_z_score=args.use_z_score)
     sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
@@ -226,8 +219,18 @@ def main(args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     if args.eval:
-        # if we are in feature-extraction mode, we only want to work with samples that have associated labels
-        extract_features(args=args, data_loader_test=data_loader_test,
+        # we are going to extract features for test and train splits. We do not want any augmentation
+        # on the training dataset
+        dataset_train_no_aug = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=None,
+                                    use_z_score=args.use_z_score)
+        data_loader_train_no_aug = torch.utils.data.DataLoader(
+            dataset_train_no_aug,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=True,
+        )
+        extract_features(args=args, data_loader_test=data_loader_test, data_loader_train=data_loader_train_no_aug,
                          device=device, model=model, log_writer_train=log_writer_train)
         exit(0)
 
@@ -317,12 +320,16 @@ def main(args):
 def extract_features(args, data_loader_train, data_loader_test, device, model, log_writer_train):
     model_path = os.path.join(PROJECT_ROOT_DIR, args.eval_model_path, 'checkpoint-contrastive_model.pth')
     assert os.path.exists(model_path), "Please ensure a trained model alredy exists"
-    checkpoint = torch.load( model_path, map_location='cpu')
+    checkpoint = torch.load(model_path, map_location='cpu')
     model.load_state_dict(checkpoint['model'])
     model.to(device)
     contrastive_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
     os.makedirs(contrastive_feature_dir, exist_ok=True)
-    generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy', label_file_name=None,
+    generate_features(data_loader_train, model, device, feature_file_name='train_contrast_ssl_features.npy',
+                      label_file_name='train_contrast_ssl_labels.npy',
+                      ssl_feature_dir=contrastive_feature_dir)
+    generate_features(data_loader_test, model, device, feature_file_name='test_contrast_ssl_features.npy',
+                      label_file_name='test_contrast_ssl_labels.npy',
                       ssl_feature_dir=contrastive_feature_dir)
 
 

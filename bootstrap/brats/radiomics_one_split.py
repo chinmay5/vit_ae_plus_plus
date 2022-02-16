@@ -314,3 +314,63 @@ print('SSL Combined with Radiomics:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
+
+
+# SSL Perceptual
+print("SSL Perceptual")
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'all_comps')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
+    test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_vit, train_label=train_y_, test_features=test_X_vit)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL Perceptual:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+# Radiomics Combined with SSL
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'all_comps')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+
+train_X_combined_3_ = np.concatenate((train_X_rad_, train_X_vit), axis=-1)
+test_X_combined_3_ = np.concatenate((test_X_rad_, test_X_vit), axis=-1)
+
+
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_combined_3_[:, ii] = min_max_normalize(train_X_combined_3_[:, ii], 1)
+    test_X_combined_3_[:, ii] = min_max_normalize(test_X_combined_3_[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_combined_3_, train_label=train_y_, test_features=test_X_combined_3_)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL Perceptual Combined with Radiomics:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
