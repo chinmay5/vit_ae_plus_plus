@@ -1,18 +1,15 @@
-import numpy as np
-from sklearn import svm, datasets
 import os
+
+import numpy as np
 from sklearn import metrics
+from sklearn import svm
 
 from environment_setup import PROJECT_ROOT_DIR
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
-from sklearn.model_selection import StratifiedKFold, KFold, train_test_split
 import matplotlib.pyplot as plt
-from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import StratifiedKFold
-import random
-from sklearn.decomposition import PCA
+
 
 def read_csv(name):
     features = []
@@ -58,9 +55,9 @@ for ii in range(np.shape(f)[1]):
 # print(np.shape(radiomics))
 labels = np.load(labels_path)
 
-# Getting indices of the train and test splits
-indices = np.arange(radiomics.shape[0])
-train_idx, test_idx = train_test_split(indices, train_size=0.8, stratify=labels, random_state=42)
+train_idx = np.load(os.path.join(base_dir, 'data', 'train_indices.npy'))
+test_idx = np.load(os.path.join(base_dir, 'data', 'test_indices.npy'))
+
 train_X_rad_, test_X_rad_ = radiomics[train_idx], radiomics[test_idx]
 train_X_ssl_, test_X_ssl_ = f[train_idx], f[test_idx]
 train_X_ssl_KMS_, test_X_ssl_KMS_ = f_2[train_idx], f_2[test_idx]

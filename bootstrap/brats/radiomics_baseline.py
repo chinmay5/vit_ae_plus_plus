@@ -40,7 +40,7 @@ labels_path = os.path.join(base_dir, 'label_all.npy')
 radiomics = np.asarray(np.load(radiomics_path))
 epochs = 45
 # Let us load the transfer features to check
-contrast_ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir','transfer')
+contrast_ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, '', 'ssl_features_dir', 'transfer')
 f4_path = os.path.join(contrast_ssl_feature_dir, 'features.npy')
 
 f = np.load(f1_path)

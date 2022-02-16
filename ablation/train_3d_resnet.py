@@ -7,7 +7,7 @@ from sklearn.model_selection import StratifiedKFold
 from ablation.resnet_3d import generate_model
 from dataset.dataset_factory import get_dataset
 from read_configs import bootstrap
-from utils.used_metrics import acc_pred
+from utils.used_metrics import roc_auc
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
@@ -22,7 +22,6 @@ from utils.misc import NativeScalerWithGradNormCount as NativeScaler
 
 from torch.utils.tensorboard import SummaryWriter
 from environment_setup import PROJECT_ROOT_DIR
-import utils.lr_decay as lrd
 import torchio as tio
 
 
@@ -100,7 +99,7 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, los
 def evaluate(data_loader, model, device, args):
     # Weights for breast_tumor = 2:1 majority being label 0
     # Since evaluation is always hard target and not SoftTarget
-    criterion = torch.nn.CrossEntropyLoss(weight=args.cross_entropy_wt).to(device)
+    criterion = torch.nn.CrossEntropyLoss().to(device)
 
     metric_logger = misc.MetricLogger(delimiter="  ")
     header = 'Test:'
@@ -125,11 +124,13 @@ def evaluate(data_loader, model, device, args):
         outGT = torch.cat((outGT, target), 0)
         metric_logger.update(loss=loss.item())
 
-    acc = acc_pred(predictions=outPRED, target=outGT)
-    metric_logger.update(acc=acc)
+    roc_score, spec, sens = roc_auc(predictions=outPRED, target=outGT)
+    metric_logger.update(roc_score=roc_score)
+    metric_logger.update(spec=spec)
+    metric_logger.update(sens=sens)
     metric_logger.synchronize_between_processes()
     print('* acc {:.3f}, loss {losses.global_avg:.3f}'
-          .format(acc, losses=metric_logger.loss))
+          .format(roc_score, losses=metric_logger.loss))
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
@@ -236,10 +237,10 @@ def main(args):
     ]
     args = bootstrap(args=args, key='RESNET')
     train_transforms = tio.Compose(transforms)
-    dataset_whole = get_dataset(dataset_name=args.dataset, mode='labels', args=args, transforms=train_transforms,
+    dataset_whole = get_dataset(dataset_name=args.dataset, mode='whole', args=args, transforms=train_transforms,
                                 use_z_score=args.use_z_score)
     features, labels = get_all_feat_und_labels(dataset_whole)
-    max_acc_k_fold = 0
+    max_roc_k_fold = 0
     # Code for the K-fold cross validation
     kfold_splits = StratifiedKFold(n_splits=5, random_state=None, shuffle=False)
     for idx, (train_ids, test_ids) in enumerate(kfold_splits.split(features, labels)):
@@ -285,7 +286,7 @@ def main(args):
         log_writer_train = SummaryWriter(log_dir=f"{args.log_dir}/train_ft_{idx}")
         log_writer_val = SummaryWriter(log_dir=f"{args.log_dir}/val_ft_{idx}")
         # Run the training loop for defined number of epochs
-        max_acc = 0
+        roc_score = 0
         for epoch in range(0, args.epochs):
             train_stats = train_one_epoch(
                 model, criterion, data_loader_train,
@@ -299,29 +300,23 @@ def main(args):
             test_stats = evaluate(data_loader_test, model, device, args=args)
 
             print(
-                f"Accuracy of the network on the {len(test_stats)} val images: {test_stats['acc']:.1f}%")
-            max_acc = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler,
-                                        max_val=max_acc,
+                f"Accuracy of the network on the {len(test_stats)} val images: {test_stats['roc_score']:.1f}%")
+            roc_score = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler,
+                                        max_val=roc_score,
                                         model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                                        cur_val=test_stats['acc'],
-                                        model_name='best_ft_model')
+                                        cur_val=test_stats['roc_score'],
+                                        model_name=f'best_ft_model_split{idx}')
             # Writing the logs
-            log_writer_val.add_scalar('ft/acc', test_stats['roc_auc_score'], epoch)
+            log_writer_val.add_scalar('ft/acc', test_stats['roc_score'], epoch)
             log_writer_val.add_scalar('ft/loss', test_stats['loss'], epoch)
-            log_writer_train.add_scalar('ft/roc_auc_score', train_val_stats['roc_auc_score'], epoch)
+            log_writer_train.add_scalar('ft/roc_auc_score', train_val_stats['roc_score'], epoch)
             log_writer_train.add_scalar('ft/loss', train_val_stats['loss'], epoch)
-
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         **{f'train_val_{k}': v for k, v in train_val_stats.items()},
-                         **{f'val_{k}': v for k, v in test_stats.items()},
-                         'epoch': epoch,
-                         'n_parameters': n_parameters}
 
             # Process is complete.
             print(f'Epoch - {epoch} complete')
 
-        max_acc_k_fold += max_acc
-        print(f'Final accuracy is {max_acc_k_fold / 5}')
+        max_roc_k_fold += roc_score
+        print(f'Final roc value is {max_roc_k_fold / 5}')
 
 
 def select_best_model(args, epoch, loss_scaler, max_val, model, model_without_ddp, optimizer, cur_val,

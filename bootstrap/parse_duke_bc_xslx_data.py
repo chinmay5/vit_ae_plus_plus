@@ -299,7 +299,8 @@ def get_ssl_items(label_name='Clinical Response, Evaluated Through Imaging ', fi
         if np.isnan(label):
             ssl_mri_scans.append(name)
         else:
-            label = label - 1  # Since we want labels to start from 0
+            if label !=0:
+                label = 1
             downstream_scans.append((name, label))
     # Some sanity checks
     ssl_set, downstream_set = set(ssl_mri_scans), set([x[0] for x in downstream_scans])
@@ -386,9 +387,10 @@ if __name__ == '__main__':
     tumor_data_file = os.path.join(META_DATA_DIR, 'Clinical_and_Other_Features.xlsx')
     # see_all_cols(tumor_data_file)
     # get_ssl_items(label_name='Clinical Response, Evaluated Through Imaging ', filename='clinical')
+    get_ssl_items(label_name='Mol Subtype', filename='luminal')
     # get_ssl_items(label_name='Pathologic Response to Neoadjuvant Therapy', filename='pathology')
-    create_numpy_for_downstream(filename='clinical')
-    create_numpy_for_downstream(filename='pathology')
+    create_numpy_for_downstream(filename='luminal')
+    # create_numpy_for_downstream(filename='pathology')
     # process_all_scans()
     # handle_bad_files_from_first_round()
     # sanity_check_fur_scan_shapes()

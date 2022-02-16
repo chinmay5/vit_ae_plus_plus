@@ -65,7 +65,7 @@ class FlairDataClinical(BaseData):
             ssl_indices = pickle.load(open(os.path.join(DATA_SPLIT_INDICES_PATH, 'clinical_ssl.pkl'), 'rb'))
             return ssl_indices
         elif mode == 'labels':
-            return pickle.load(open(os.path.join(DATA_SPLIT_INDICES_PATH, 'clinical_annotated_mit_labels.pkl'), 'rb'))
+            return pickle.load(open(os.path.join(DATA_SPLIT_INDICES_PATH, 'clinical_annotated_mit_labels_purged.pkl'), 'rb'))
         else:
             raise AttributeError(f"Invalid choice of mode. Chosen {mode}")
 
@@ -80,7 +80,7 @@ class FlairDataPathology(BaseData):
             ssl_indices = pickle.load(open(os.path.join(DATA_SPLIT_INDICES_PATH, 'pathology_ssl.pkl'), 'rb'))
             return ssl_indices
         elif mode == 'labels':
-            return pickle.load(open(os.path.join(DATA_SPLIT_INDICES_PATH, 'pathology_annotated_mit_labels.pkl'), 'rb'))
+            return pickle.load(open(os.path.join(DATA_SPLIT_INDICES_PATH, 'pathology_annotated_mit_labels_purged.pkl'), 'rb'))
         else:
             raise AttributeError(f"Invalid choice of mode. Chosen {mode}")
 

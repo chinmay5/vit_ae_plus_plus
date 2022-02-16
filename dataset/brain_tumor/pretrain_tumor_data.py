@@ -6,6 +6,7 @@ from torch import sqrt
 from torch.utils.data import Dataset
 import torchio as tio
 
+
 BASE_PATH = '/mnt/cat/chinmay/brats_processed/data/splits'
 
 class FlairData(Dataset):
@@ -16,7 +17,7 @@ class FlairData(Dataset):
         self.data = data_raw.transpose([0, 4, 1, 2, 3])
         self.transform = transform
         self.use_z_score = use_z_score
-        self.labels = np.load(os.path.join(BASE_PATH,label_name)) if label_name is not None else None
+        self.labels = np.load(os.path.join(BASE_PATH, label_name)) if label_name is not None else None
         print(f"Using z-score normalization: {use_z_score}")
 
     def __len__(self):
@@ -27,50 +28,34 @@ class FlairData(Dataset):
             # Since this is a single channel image so, we can ignore the `axis` parameter
             return (volume - volume.mean()) / sqrt(volume.var())
         max_val, min_val = volume.max(), volume.min()
-        volume = (volume - min_val)/ (max_val - min_val)
+        volume = (volume - min_val) / (max_val - min_val)
         return 2 * volume - 1  # Range of values [1, -1]
 
     def _min_max_normalize_data(self, volume):
         max_val, min_val = volume.max(), volume.min()
-        volume = (volume - min_val)/ (max_val - min_val)
+        volume = (volume - min_val) / (max_val - min_val)
         return volume  # Range of values [0, 1]
 
     def __getitem__(self, item):
         volume = torch.tensor(self.data[item], dtype=torch.float)
-        # volume = self._min_max_normalize_data(volume)
+        original_volume = self._normalize_data(volume.clone())
         if self.transform is not None:
             volume = self.transform(volume)
-        # If we normalize first and then apply transforms, the range of input values is changed to exceed the limits
         volume = self._normalize_data(volume)
         if self.labels is not None:
-            return volume, torch.tensor(self.labels[item])
-        return volume
+            return volume, original_volume, torch.tensor(self.labels[item])
+        return volume, original_volume
 
     def __str__(self):
         return f"Pre-train Flair MRI data with transforms = {self.transform}"
 
 
 def build_dataset(mode, args=None, transforms=None, use_z_score=False):
-    assert mode in ['train', 'valid', 'test', 'feat_extract', 'combined'], "Invalid Mode selected"
-    if mode == 'feat_extract':
-        # A special case where we simply use all the data in our feature extraction pipeline. So, no augmentations
-        # and the split file would be combination of both train and val
-        return FlairData(filename='feature_extraction_x.npy', transform=None, label_name='feature_extraction_labels.npy', use_z_score=use_z_score)
-    if mode == 'train':
-        filename = 'x_train_ssl.npy'
-        label_name = 'y_train_ssl.npy'
-    elif mode == 'valid':
-        filename = 'x_val_ssl.npy'
-        label_name = 'y_val_ssl.npy'
-    elif mode == 'combined':
-        filename = 'combined_data.npy'
-        label_name = 'combined_labels.npy'
-    else:
-        # Because of assert security net, this is test mode
-        filename = 'feature_extraction_test_x.npy'
-        label_name = 'feature_extraction_test_labels.npy'
+    # TODO: Clean this up later. Looks ugly
+    assert mode in ['train', 'val', 'test', 'whole'], f"Invalid Mode selected, {mode}"
+    filename = f'x_{mode}_ssl.npy'
+    label_name = f'y_{mode}_ssl.npy'
     return FlairData(filename=filename, transform=transforms, label_name=label_name, use_z_score=use_z_score)
-
 
 
 if __name__ == '__main__':
@@ -82,20 +67,12 @@ if __name__ == '__main__':
     ]
     transformations = tio.Compose(transforms)
 
-    # all_elements = ['x_train_ssl.npy', 'x_val_ssl.npy', 'feature_extraction_test_x.npy']
-    # combined_data = []
-    # for elem in all_elements:
-    #     data_raw = np.load(os.path.join(BASE_PATH, elem))
-    #     combined_data.append(data_raw)
-    # combined = np.concatenate(combined_data)
-    # np.save(os.path.join(BASE_PATH, 'combined_data.npy'), combined)
-
-    data = build_dataset(mode='combined')
+    data = build_dataset(mode='whole')
     print(len(data))
     data_loader = torch.utils.data.DataLoader(data, batch_size=4)
     min_val, max_val = float("inf"), 0
 
-    for batch_data, label in data_loader:
+    for batch_data,_, label in data_loader:
         if batch_data.max() > max_val:
             max_val = batch_data.max()
         if batch_data.min() < min_val:
@@ -106,24 +83,23 @@ if __name__ == '__main__':
     data_loader = torch.utils.data.DataLoader(train_data, batch_size=16)
     min_val, max_val = float("inf"), 0
     all_ones, total = 0, 0
-    for batch_data, labels in data_loader:
+    for batch_data,_, labels in data_loader:
         all_ones += labels.sum()
         total += labels.shape[0]
         if batch_data.max() > max_val:
             max_val = batch_data.max()
         if batch_data.min() < min_val:
             min_val = batch_data.min()
-    print(f"% of ones {all_ones/total}")
+    print(f"% of ones {all_ones / total}")
     print(f"Max value is {max_val}, min value {min_val}")
     #     break
     # Checking for the validation split
-    test_data = build_dataset(mode='feat_extract')
+    test_data = build_dataset(mode='train')
     data_loader = torch.utils.data.DataLoader(test_data, batch_size=16)
     min_val, max_val = float("inf"), 0
-    for batch_data, labels in data_loader:
+    for batch_data, _, labels in data_loader:
         if batch_data.max() > max_val:
             max_val = batch_data.max()
         if batch_data.min() < min_val:
             min_val = batch_data.min()
     print(f"Max value is {max_val}, min value {min_val}")
-
