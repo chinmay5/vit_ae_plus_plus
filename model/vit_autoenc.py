@@ -18,7 +18,7 @@ class MaskedAutoencoderViT(nn.Module):
     def __init__(self, volume_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False, args=None):
         super().__init__()
 
         # --------------------------------------------------------------------------
@@ -53,11 +53,13 @@ class MaskedAutoencoderViT(nn.Module):
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size ** 3 * in_chans, bias=True)  # encoder to decoder
         self.sobel_filter3D = SobelFilter3d()
         self.perceptual_loss = vgg_perceptual_loss()
+        self.args = args
+        self.perceptual_weight = 1 if self.args is None else self.args.perceptual_weight
+        print(f"Using perceptual weight of {self.perceptual_weight}")
 
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
-
         self.initialize_weights()
 
     def initialize_weights(self):
@@ -213,37 +215,20 @@ class MaskedAutoencoderViT(nn.Module):
             target = (target - mean) / (var + 1.e-6) ** .5
 
         loss = self.get_weighted_loss(pred, target, mask, edge_map_weight=edge_map_weight)
-        # loss = (pred - target) ** 2
-        # loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-        # loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
         return loss
 
     def get_weighted_loss(self, pred, target, mask, edge_map_weight=0):
         pred_vol, target_vol = self.unpatchify(pred), self.unpatchify(target)
-        pred_edge_map, orig_input_edge_map = self.sobel_filter3D(pred_vol), self.sobel_filter3D(perform_3d_gaussian_blur(target_vol, blur_sigma=2))
-        edge_map_loss = F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
+        pred_edge_map, orig_input_edge_map = self.sobel_filter3D(pred_vol), self.sobel_filter3D(
+            perform_3d_gaussian_blur(target_vol, blur_sigma=2))
+        edge_map_loss = edge_map_weight * F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
         reconstruction_loss = ((pred - target) ** 2).mean(dim=-1)
         reconstruction_loss = (reconstruction_loss * mask).sum() / mask.sum()  # mean loss on removed patches
         # Including the perceptual loss
         with torch.no_grad():
-            # percep_loss = 10 * self.perceptual_loss(pred_vol, target_vol)
-            percep_loss = self.perceptual_loss(pred_vol, target_vol)
-        loss = edge_map_weight * edge_map_loss + reconstruction_loss + percep_loss
+            percep_loss = self.perceptual_weight * self.perceptual_loss(pred_vol, target_vol)
+        loss = edge_map_loss + reconstruction_loss + percep_loss
         return [loss, edge_map_loss, reconstruction_loss, percep_loss]
-
-
-    # def get_weighted_loss(self, pred, target, mask, edge_map_weight=0):
-    #     pred_vol, target_vol = self.unpatchify(pred), self.unpatchify(target)
-    #     # pred_edge_map, orig_input_edge_map = self.sobel_filter3D(pred_vol), self.sobel_filter3D(perform_3d_gaussian_blur(target_vol, blur_sigma=2))
-    #     # edge_map_loss = F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
-    #     reconstruction_loss = ((pred - target) ** 2).mean(dim=-1)
-    #     reconstruction_loss = (reconstruction_loss * mask).sum() / mask.sum()  # mean loss on removed patches
-    #     # Including the perceptual loss
-    #     with torch.no_grad():
-    #         percep_loss = 10 * self.perceptual_loss(pred_vol, target_vol)
-    #     loss = percep_loss + reconstruction_loss #edge_map_weight * edge_map_loss +
-    #     return [loss, 0, reconstruction_loss, percep_loss]
-
 
     def forward(self, sample, mask_ratio=0.75, edge_map_weight=0):
         latent, mask, ids_restore = self.forward_encoder(sample, mask_ratio)

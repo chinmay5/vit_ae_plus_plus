@@ -47,4 +47,5 @@ def bootstrap(args, key='SETUP'):
     args.selection_type = parser['DATASET'].get('selection_type')
     args.mode = parser['DATASET'].get('mode')
     args.num_classes = parser['DATASET'].getint('num_classes')
+    args.perceptual_weight = parser[key].getint('perceptual_weight', fallback=0)
     return args
