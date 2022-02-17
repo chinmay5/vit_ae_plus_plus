@@ -28,25 +28,25 @@ class SVMModel(MLModel):
         return "svm"
 
     def execute_method(self, train_features, train_label, test_features):
-        param_grid = {'C': [0.1, 1, 10, 100, 1000],
+        param_grid = {'C': [0.1, 1, 5, 10],
                       'kernel': ['linear', 'rbf']}
 
-        # grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42, class_weight='balanced'), param_grid, refit=True, verbose=0,
-        #                           random_state=42)
-       # model = svm.SVC(probability=True, random_state=42, class_weight='balanced', C=0.1)
-        model = svm.SVC(random_state=42, class_weight='balanced', probability=True, C=1, kernel='linear')
-        model.fit(train_features, train_label)
-        return model.predict_proba(test_features)
+        grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42, class_weight='balanced'), param_grid, refit=True, verbose=0,
+                                  random_state=42)
+        # model = svm.SVC(probability=True, random_state=42, class_weight='balanced', C=0.1)
+        # model = svm.SVC(random_state=42, class_weight='balanced', probability=True, C=1, kernel='linear')
+        # model.fit(train_features, train_label)
+        # return model.predict_proba(test_features)
         # return model.predict_proba(test_features)
         # fitting the model for grid search
-        # grid.fit(train_features, train_label)
+        grid.fit(train_features, train_label)
         # print best parameter after tuning
         # print(grid.best_params_)
 
         # print how our model looks after hyper-parameter tuning
-        # print(grid.best_estimator_)
-        # pred = grid.predict_proba(test_features)
-        # return pred
+        print(grid.best_estimator_)
+        pred = grid.predict_proba(test_features)
+        return pred
 
 
 class RFModel(MLModel):

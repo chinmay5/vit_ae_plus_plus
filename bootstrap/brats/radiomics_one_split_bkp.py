@@ -4,6 +4,7 @@ import numpy as np
 from sklearn import metrics
 from sklearn import svm
 
+from bootstrap.utils.classical_models import execute_models
 from environment_setup import PROJECT_ROOT_DIR
 
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
@@ -78,10 +79,11 @@ np.save(test_indices_save_path, test_idx)
 def classification(train_features, train_label, test_features):
    # lin_clf = svm.LinearSVC()
    # lin_clf.fit(train_features, train_label)
-    clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear',random_state=42)
-    clf.fit(train_features, train_label)
-    pred = clf.predict_proba(test_features)
-    return pred
+   #  clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear',random_state=42)
+   #  clf.fit(train_features, train_label)
+   #  pred = clf.predict_proba(test_features)
+    results = execute_models(train_features, train_label, test_features, 'svm')  # 'svm') #, 'rf', 'linear')
+    return results['svm']
 
 train_X_combined_ = np.concatenate((train_X_rad_, train_X_ssl_), axis=-1)
 train_X_combined_2_ = np.concatenate((train_X_rad_, train_X_ssl_KMS_), axis=-1)
