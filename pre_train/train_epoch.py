@@ -123,9 +123,6 @@ def train_one_epoch(model: torch.nn.Module,
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
-    # parser.add_argument('--batch_size', default=4, type=int,
-    #                     help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
-    # parser.add_argument('--epochs', default=1000, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
@@ -139,19 +136,10 @@ def get_args_parser():
     parser.add_argument('--in_channels', default=1, type=int,
                         help='Number of channels in the input')
 
-    # parser.add_argument('--patch_size', default=8, type=int,
-    #                     help='Patch size for dividing the input')
-
-    # parser.add_argument('--mask_ratio', default=0.50, type=float,
-    #                     help='Masking ratio (percentage of removed patches).')
 
     parser.add_argument('--norm_pix_loss', action='store_true',
                         help='Use (per-patch) normalized pixels as targets for computing loss')
     parser.set_defaults(norm_pix_loss=False)
-
-    # Optimizer parameters
-    # parser.add_argument('--weight_decay', type=float, default=0.05,
-    #                     help='weight decay (default: 0.05)')
 
     parser.add_argument('--lr', type=float, default=None, metavar='LR',
                         help='learning rate (absolute lr)')
@@ -175,13 +163,6 @@ def get_args_parser():
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
 
-    # distributed training parameters
-    parser.add_argument('--world_size', default=1, type=int,
-                        help='number of distributed processes')
-    parser.add_argument('--local_rank', default=-1, type=int)
-    parser.add_argument('--dist_on_itp', action='store_true')
-    parser.add_argument('--dist_url', default='env://',
-                        help='url used to set up distributed training')
 
     return parser
 
@@ -251,10 +232,6 @@ def main(args):
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-        model_without_ddp = model.module
-
     # following timm: set wd as 0 for bias and norm layers
     param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
@@ -310,6 +287,4 @@ def main(args):
 if __name__ == '__main__':
     args = get_args_parser()
     args = args.parse_args()
-    # if args.output_dir:
-    #     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)
