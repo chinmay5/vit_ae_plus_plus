@@ -46,7 +46,7 @@ f4_path = os.path.join(contrast_ssl_feature_dir, 'features.npy')
 f = np.load(f1_path)
 f_2 = np.load(f2_path)
 f_3 = np.load(f3_path)
-f_4 = np.load(f4_path)
+# f_4 = np.load(f4_path)
 
 
 #f_2 = np.load('data/SS_features_k'+str(3)+'b_'+str(6)+'_epoch_'+str(2950)+'_256.npy')
@@ -63,7 +63,7 @@ for ii in range(np.shape(f)[1]):
     f[:, ii] = min_max_normalize(f[:, ii], 1)
     f_2[:, ii] = min_max_normalize(f_2[:, ii], 1)
     f_3[:, ii] = min_max_normalize(f_3[:, ii], 1)
-    f_4[:, ii] = min_max_normalize(f_4[:, ii], 1)
+    # f_4[:, ii] = min_max_normalize(f_4[:, ii], 1)
 
 # print(np.shape(radiomics))
 labels = np.load(labels_path)
@@ -84,12 +84,12 @@ for train, val in skf.split(radiomics, labels):
     train_X_ssl_ = f[train]
     train_X_ssl_KMS_ = f_2[train]
     train_X_ssl_RW_ = f_3[train]
-    train_X_ssl_Contrast_ = f_4[train]
+    # train_X_ssl_Contrast_ = f_4[train]
 
     train_X_combined_ = np.concatenate((train_X_rad_, train_X_ssl_), axis=-1)
     train_X_combined_2_ = np.concatenate((train_X_rad_, train_X_ssl_KMS_), axis=-1)
     train_X_combined_3_ = np.concatenate((train_X_rad_, train_X_ssl_RW_), axis=-1)
-    train_X_combined_4_ = np.concatenate((train_X_rad_, train_X_ssl_Contrast_), axis=-1)
+    # train_X_combined_4_ = np.concatenate((train_X_rad_, train_X_ssl_Contrast_), axis=-1)
 
     train_y_ = labels[train]
 
@@ -102,12 +102,12 @@ for train, val in skf.split(radiomics, labels):
         train_X_ssl = train_X_ssl_[train_50]
         train_X_ssl_KMS = train_X_ssl_KMS_[train_50]
         train_X_ssl_RW = train_X_ssl_RW_[train_50]
-        train_X_ssl_Contrast = train_X_ssl_Contrast_[train_50]
+        # train_X_ssl_Contrast = train_X_ssl_Contrast_[train_50]
 
         train_X_combined = train_X_combined_[train_50]
         train_X_combined_2 = train_X_combined_2_[train_50]
         train_X_combined_3 = train_X_combined_3_[train_50]
-        train_X_combined_4 = train_X_combined_4_[train_50]
+        # train_X_combined_4 = train_X_combined_4_[train_50]
         train_y = train_y_[train_50]
 
 
@@ -115,13 +115,13 @@ for train, val in skf.split(radiomics, labels):
     val_X_ssl = f[val]
     val_X_ssl_KMS = f_2[val]
     val_X_ssl_RW = f_3[val]
-    val_X_ssl_Contrast = f_4[val]
+    # val_X_ssl_Contrast = f_4[val]
     #val_X_ssl_KMS_add = f_3[val]
 
     val_X_combined = np.concatenate((val_X_rad, val_X_ssl), axis=-1)
     val_X_combined_2 = np.concatenate((val_X_rad, val_X_ssl_KMS), axis=-1)
     val_X_combined_3 = np.concatenate((val_X_rad, val_X_ssl_RW), axis=-1)
-    val_X_combined_4 = np.concatenate((val_X_rad, val_X_ssl_Contrast), axis=-1)
+    # val_X_combined_4 = np.concatenate((val_X_rad, val_X_ssl_Contrast), axis=-1)
     #val_X_combined_3 = np.concatenate((val_X_rad, val_X_ssl_KMS_add), axis=-1)
 
     val_y = labels[val]
@@ -132,12 +132,12 @@ for train, val in skf.split(radiomics, labels):
         temp_pred_ssl = classification(train_X_ssl, train_y, val_X_ssl)
         temp_pred_ssl_KMS = classification(train_X_ssl_KMS, train_y, val_X_ssl_KMS)
         temp_pred_ssl_RW = classification(train_X_ssl_RW, train_y, val_X_ssl_RW)
-        temp_pred_ssl_Contrast = classification(train_X_ssl_Contrast, train_y, val_X_ssl_Contrast)
+        # temp_pred_ssl_Contrast = classification(train_X_ssl_Contrast, train_y, val_X_ssl_Contrast)
 
         temp_pred_combined = classification(train_X_combined, train_y, val_X_combined)
         temp_pred_combined_2 = classification(train_X_combined_2, train_y, val_X_combined_2)
         temp_pred_combined_3 = classification(train_X_combined_3, train_y, val_X_combined_3)
-        temp_pred_combined_4 = classification(train_X_combined_4, train_y, val_X_combined_4)
+        # temp_pred_combined_4 = classification(train_X_combined_4, train_y, val_X_combined_4)
      #   temp_pred_combined_3 = classification(train_X_combined_3, train_y, val_X_combined_3)
 
     else:
@@ -145,11 +145,11 @@ for train, val in skf.split(radiomics, labels):
         test_pred_ssl = classification(train_X_ssl, train_y, val_X_ssl)
         test_pred_ssl_KMS = classification(train_X_ssl_KMS, train_y, val_X_ssl_KMS)
         test_pred_ssl_RW = classification(train_X_ssl_RW, train_y, val_X_ssl_RW)
-        test_pred_ssl_Contrast = classification(train_X_ssl_Contrast, train_y, val_X_ssl_Contrast)
+        # test_pred_ssl_Contrast = classification(train_X_ssl_Contrast, train_y, val_X_ssl_Contrast)
         test_pred_combined = classification(train_X_combined, train_y, val_X_combined)
         test_pred_combined_2 = classification(train_X_combined_2, train_y, val_X_combined_2)
         test_pred_combined_3 = classification(train_X_combined_3, train_y, val_X_combined_3)
-        test_pred_combined_4 = classification(train_X_combined_4, train_y, val_X_combined_4)
+        # test_pred_combined_4 = classification(train_X_combined_4, train_y, val_X_combined_4)
       #  test_pred_combined_3 = classification(train_X_combined_3, train_y, val_X_combined_3)
 
         temp_label = np.concatenate((temp_label, val_y), axis=0)
@@ -157,11 +157,11 @@ for train, val in skf.split(radiomics, labels):
         temp_pred_ssl = np.concatenate((temp_pred_ssl, test_pred_ssl), axis=0)
         temp_pred_ssl_KMS = np.concatenate((temp_pred_ssl_KMS, test_pred_ssl_KMS), axis=0)
         temp_pred_ssl_RW = np.concatenate((temp_pred_ssl_RW, test_pred_ssl_RW), axis=0)
-        temp_pred_ssl_Contrast = np.concatenate((temp_pred_ssl_Contrast, test_pred_ssl_Contrast), axis=0)
+        # temp_pred_ssl_Contrast = np.concatenate((temp_pred_ssl_Contrast, test_pred_ssl_Contrast), axis=0)
         temp_pred_combined = np.concatenate((temp_pred_combined, test_pred_combined), axis=0)
         temp_pred_combined_2 = np.concatenate((temp_pred_combined_2, test_pred_combined_2), axis=0)
         temp_pred_combined_3 = np.concatenate((temp_pred_combined_3, test_pred_combined_3), axis=0)
-        temp_pred_combined_4 = np.concatenate((temp_pred_combined_4, test_pred_combined_4), axis=0)
+        # temp_pred_combined_4 = np.concatenate((temp_pred_combined_4, test_pred_combined_4), axis=0)
        # temp_pred_combined_3 = np.concatenate((temp_pred_combined_3, test_pred_combined_3), axis=0)
 
     count += 1
@@ -171,11 +171,11 @@ temp_pred_rad = temp_pred_rad[:, 1]
 temp_pred_ssl = temp_pred_ssl[:, 1]
 temp_pred_ssl_KMS = temp_pred_ssl_KMS[:, 1]
 temp_pred_ssl_RW = temp_pred_ssl_RW[:, 1]
-temp_pred_ssl_Contrast = temp_pred_ssl_Contrast[:, 1]
+# temp_pred_ssl_Contrast = temp_pred_ssl_Contrast[:, 1]
 temp_pred_combined = temp_pred_combined[:, 1]
 temp_pred_combined_2 = temp_pred_combined_2[:, 1]
 temp_pred_combined_3 = temp_pred_combined_3[:, 1]
-temp_pred_combined_4 = temp_pred_combined_4[:, 1]
+# temp_pred_combined_4 = temp_pred_combined_4[:, 1]
 
 
 fig = plt.figure(1)
@@ -202,8 +202,8 @@ auc = metrics.roc_auc_score(temp_label, temp_pred_ssl_RW)
 plt.plot(fpr,tpr,label="SSL+RW radiomics, AUC = "+str(auc)[0:5])
 plt.legend(loc=4, prop={'size': 12})
 
-fpr, tpr, _ = metrics.roc_curve(temp_label,  temp_pred_ssl_Contrast)
-auc = metrics.roc_auc_score(temp_label, temp_pred_ssl_Contrast)
+# fpr, tpr, _ = metrics.roc_curve(temp_label,  temp_pred_ssl_Contrast)
+# auc = metrics.roc_auc_score(temp_label, temp_pred_ssl_Contrast)
 plt.plot(fpr,tpr,label="SSL+Contrast radiomics, AUC = "+str(auc)[0:5])
 plt.legend(loc=4, prop={'size': 12})
 
@@ -226,8 +226,8 @@ auc = metrics.roc_auc_score(temp_label, temp_pred_combined_3)
 plt.plot(fpr,tpr,label="trad. + SSL-RW radiomics, AUC = "+str(auc)[0:5])
 plt.legend(loc=4, prop={'size': 12})
 
-fpr, tpr, _ = metrics.roc_curve(temp_label,  temp_pred_combined_4)
-auc = metrics.roc_auc_score(temp_label, temp_pred_combined_4)
+# fpr, tpr, _ = metrics.roc_curve(temp_label,  temp_pred_combined_4)
+# auc = metrics.roc_auc_score(temp_label, temp_pred_combined_4)
 plt.plot(fpr,tpr,label="trad. + SSL-Contrast radiomics, AUC = "+str(auc)[0:5])
 plt.legend(loc=4, prop={'size': 12})
 
@@ -300,19 +300,19 @@ print('sensitivity:', sensitivity)
 print("roc_auc_score:", roc_auc_score_RW)
 
 
-temp_pred_ssl_Contrast_=temp_pred_ssl_Contrast
-roc_auc_score_Contrast = roc_auc_score(temp_label, temp_pred_ssl_Contrast_)
-temp_pred_ssl_Contrast_[temp_pred_ssl_Contrast_>=0.5] = 1
-temp_pred_ssl_Contrast_[temp_pred_ssl_Contrast_<0.5] = 0
-cm = confusion_matrix(temp_pred_ssl_Contrast_, temp_label)
-print(cm)
-specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
-print('SSL-Contrast alone:')
-print('specificity:', specificity)
-sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
-print('sensitivity:', sensitivity)
-print("roc_auc_score:", roc_auc_score_Contrast)
-
+# temp_pred_ssl_Contrast_=temp_pred_ssl_Contrast
+# roc_auc_score_Contrast = roc_auc_score(temp_label, temp_pred_ssl_Contrast_)
+# temp_pred_ssl_Contrast_[temp_pred_ssl_Contrast_>=0.5] = 1
+# temp_pred_ssl_Contrast_[temp_pred_ssl_Contrast_<0.5] = 0
+# cm = confusion_matrix(temp_pred_ssl_Contrast_, temp_label)
+# print(cm)
+# specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+# print('SSL-Contrast alone:')
+# print('specificity:', specificity)
+# sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+# print('sensitivity:', sensitivity)
+# print("roc_auc_score:", roc_auc_score_Contrast)
+#
 
 
 temp_pred_combined_= temp_pred_combined
@@ -356,18 +356,18 @@ print("roc_auc_score", roc_auc_score_combined_3)
 
 
 
-temp_pred_combined_4_= temp_pred_combined_4
-roc_auc_score_combined_4 = roc_auc_score(temp_label, temp_pred_combined_4)
-temp_pred_combined_4[temp_pred_combined_4>=0.6] = 1
-temp_pred_combined_4[temp_pred_combined_4<0.6] = 0
-cm = confusion_matrix(temp_pred_combined_4, temp_label)
-print(cm)
-specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
-print('Combined with Contrast:')
-print('specificity:', specificity)
-sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
-print('sensitivity:', sensitivity)
-print("roc_auc_score", roc_auc_score_combined_4)
+# temp_pred_combined_4_= temp_pred_combined_4
+# roc_auc_score_combined_4 = roc_auc_score(temp_label, temp_pred_combined_4)
+# temp_pred_combined_4[temp_pred_combined_4>=0.6] = 1
+# temp_pred_combined_4[temp_pred_combined_4<0.6] = 0
+# cm = confusion_matrix(temp_pred_combined_4, temp_label)
+# print(cm)
+# specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+# print('Combined with Contrast:')
+# print('specificity:', specificity)
+# sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+# print('sensitivity:', sensitivity)
+# print("roc_auc_score", roc_auc_score_combined_4)
 
 
 # temp_pred_combined_3_= temp_pred_combined_3
