@@ -163,6 +163,9 @@ def get_args_parser():
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
 
+    parser.add_argument('--dist_on_itp', action='store_true')
+
+
 
     return parser
 

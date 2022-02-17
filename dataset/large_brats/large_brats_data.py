@@ -7,14 +7,17 @@ from torch import sqrt
 from torch.utils.data import Dataset
 import torchio as tio
 
+from environment_setup import PROJECT_ROOT_DIR
+
 BASE_PATH = '/mnt/cat/chinmay/glioma_Bene/pre_processed'
 
 
 class MultiModalData(Dataset):
     def __init__(self, mode, transform=None, use_z_score=False):
         super(MultiModalData).__init__()
+        split_path = os.path.join(PROJECT_ROOT_DIR, 'dataset', 'large_brats')
         filename = 'who_idh_mutation_status_ssl.pkl' if mode == 'ssl' else 'who_idh_mutation_status_annotated_mit_labels.pkl'
-        self.indices = pickle.load(open(filename, 'rb'))
+        self.indices = pickle.load(open(os.path.join(split_path,filename), 'rb'))
         self.transform = transform
         self.use_z_score = use_z_score
         self.has_labels = mode == 'test'
@@ -62,7 +65,6 @@ class MultiModalData(Dataset):
 
 
 def create_the_dataset(mode, args=None, transforms=None, use_z_score=False):
-    # TODO: Clean this up later. Looks ugly
     assert mode in ['ssl', 'test'], f"Invalid Mode selected, {mode}"
     return MultiModalData(mode=mode, transform=transforms, use_z_score=use_z_score)
 
