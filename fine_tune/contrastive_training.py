@@ -228,7 +228,7 @@ def main(args):
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
-            drop_last=True,
+            drop_last=False,
         )
         extract_features(args=args, data_loader_test=data_loader_test, data_loader_train=data_loader_train_no_aug,
                          device=device, model=model, log_writer_train=log_writer_train)
