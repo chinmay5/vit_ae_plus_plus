@@ -259,8 +259,8 @@ mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 b
 
 if __name__ == '__main__':
     image_size = (96, 96, 96)
-    model = mae_vit_base_patch16(volume_size=image_size, in_chans=1, patch_size=8)
-    sample_img = torch.randn(8, 1, 96, 96, 96)
+    model = mae_vit_base_patch16(volume_size=image_size, in_chans=3, patch_size=8)
+    sample_img = torch.randn(8, 3, 96, 96, 96)
     loss, pred, mask = model(sample_img)
     print(pred.shape)
     print(loss[0].item())

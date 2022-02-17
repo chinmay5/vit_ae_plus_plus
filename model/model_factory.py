@@ -8,6 +8,7 @@ from model.vit import VisionTransformer3D, VisionTransformer3DContrastive
 
 def get_models(model_name, args):
     if model_name == 'autoenc':
+        print(f"Number of channels is {args.in_channels}")
         return vit_autoenc.__dict__[args.model](volume_size=args.volume_size, in_chans=args.in_channels, patch_size=args.patch_size, args=args)
     elif model_name == 'vit':
         return VisionTransformer3D(volume_size=args.volume_size, in_chans=args.in_channels, num_classes=args.nb_classes,

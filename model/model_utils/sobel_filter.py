@@ -35,10 +35,13 @@ class SobelFilter3d(nn.Module):
         return sobel_filter
 
     def forward(self, x):
-        g_x = self.sobel_filter(x)[:, 0]
-        g_y = self.sobel_filter(x)[:, 1]
-        g_z = self.sobel_filter(x)[:, 2]
-        combined_edge_map = torch.sqrt((g_x **2 + g_y ** 2 + g_z ** 2))
+        bs, ch, l, h, w = x.shape
+        combined_edge_map = 0
+        for idx in range(ch):
+            g_x = self.sobel_filter(x[:, idx:idx+1])[:, 0]
+            g_y = self.sobel_filter(x[:, idx:idx+1])[:, 1]
+            g_z = self.sobel_filter(x[:, idx:idx+1])[:, 2]
+            combined_edge_map += torch.sqrt((g_x **2 + g_y ** 2 + g_z ** 2))
         return combined_edge_map
 
 
@@ -46,7 +49,7 @@ if __name__ == '__main__':
     filter = SobelFilter3d()
     x = torch.randn((4, 1, 32, 32, 32))
     output1 = filter(x)
-    x = torch.randn((4, 1, 32, 32, 32))
+    x = torch.randn((4, 3, 32, 32, 32))
     output2 = filter(x)
     loss = torch.nn.L1Loss()
     print(loss(output1, output2).sum())

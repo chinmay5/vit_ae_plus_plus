@@ -40,7 +40,7 @@ class vgg_perceptual_loss(torch.nn.Module):
     def forward_one_view(self, X):
         # X = bs, ch, z, y, x
         X = X.permute(0, 2, 1, 3, 4)  # bs, z, ch, y, x
-        X = X.view(-1, *X.size()[2:])
+        X = X.reshape(-1, *X.size()[2:])
         if X.size(1) == 1:
             X = X.repeat(1, 3, 1, 1)
         h = self.slice1(X)
@@ -56,16 +56,30 @@ class vgg_perceptual_loss(torch.nn.Module):
 
         return out
 
-    def forward(self, X1, X2):
+    def compute_loss_per_channel(self, X1, X2):
         view1_activations = self.forward_one_view(X1)
         view2_activations = self.forward_one_view(X2)
         loss = torch.mean(
             torch.as_tensor([self.mse_loss(view1_activations[i], view2_activations[i]) for i in range(self.N_slices)]))
         return loss
 
+    def forward(self, X1, X2):
+        bs, ch, _, _, _ = X1.shape
+        loss = 0
+        for idx in range(ch):
+            loss += self.compute_loss_per_channel(X1[:, idx:idx+1], X2[:, idx:idx+1])
+        return loss / ch
+
+    # def forward(self, X1, X2):
+    #     view1_activations = self.forward_one_view(X1)
+    #     view2_activations = self.forward_one_view(X2)
+    #     loss = torch.mean(
+    #         torch.as_tensor([self.mse_loss(view1_activations[i], view2_activations[i]) for i in range(self.N_slices)]))
+    #     return loss
+
 
 if __name__ == '__main__':
     loss = vgg_perceptual_loss()
-    volume1 = torch.randn(4, 1, 32, 32, 32)
-    volume2 = torch.randn(4, 1, 32, 32, 32)
+    volume1 = torch.randn(4, 4, 32, 32, 32)
+    volume2 = torch.randn(4, 4, 32, 32, 32)
     print(loss(volume1, volume2))
