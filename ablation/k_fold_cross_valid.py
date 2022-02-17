@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from sklearn.model_selection import StratifiedKFold
 from timm.optim import optim_factory
-from timm.utils import NativeScaler
+from utils.misc import NativeScalerWithGradNormCount as NativeScaler
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
 
@@ -48,6 +48,7 @@ def get_args_parser():
                         help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')
     parser.add_argument('--min_lr', type=float, default=0, metavar='LR',  # earlier 0
                         help='lower lr bound for cyclic schedulers that hit 0')
+    parser.add_argument('--dist_on_itp', action='store_true')
 
     parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
                         help='epochs to warmup LR')
@@ -61,6 +62,16 @@ def get_args_parser():
                         help='Pin CPU memory in DataLoader for more efficient (sometimes) transfer to GPU.')
     parser.add_argument('--no_pin_mem', action='store_false', dest='pin_mem')
     parser.set_defaults(pin_mem=True)
+    parser.add_argument('--resume', default='',
+                        help='resume from checkpoint')
+    parser.add_argument('--global_pool', action='store_true')
+    parser.set_defaults(global_pool=True)
+    parser.add_argument('--cls_token', action='store_false', dest='global_pool',
+                        help='Use class token instead of global pool for classification')
+
+    # Dataset parameters
+    parser.add_argument('--nb_classes', default=2, type=int,
+                        help='number of the classification types')
 
     return parser
 
@@ -97,10 +108,13 @@ def main(args):
     os.makedirs(log_dir, exist_ok=True)
     log_writer = SummaryWriter(log_dir=log_dir)
     kfold_splits = StratifiedKFold(n_splits=3, random_state=None, shuffle=False)
+    # Create the location for storing splits
+    split_index_path = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'k_fold', 'indices_file')
+    os.makedirs(split_index_path, exist_ok=True)
     for idx, (train_ids, test_ids) in enumerate(kfold_splits.split(features, labels)):
         # First we need to save these indices. This would ensure we can reproduce the results
-        pickle.dump(os.path.join(PROJECT_ROOT_DIR, args.dataset, 'k_fold', 'indices_file', f"train_{idx}"), train_ids)
-        pickle.dump(os.path.join(PROJECT_ROOT_DIR, args.dataset, 'k_fold', 'indices_file', f"test_{idx}"), test_ids)
+        pickle.dump(train_ids, open(os.path.join(split_index_path, f"train_{idx}"), 'wb'))
+        pickle.dump(test_ids, open(os.path.join(split_index_path, f"test_{idx}"), 'wb'))
         # Now we create the dataloader
         train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
         test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
@@ -194,7 +208,7 @@ def main(args):
         model = get_models(model_name='vit', args=args)
         args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
 
-        args.finetune = os.path.join(args.output_dir, "checkpoints", f"min_loss_k_fold_split_{idx}")
+        args.finetune = os.path.join(args.output_dir, f"checkpoint-min_loss_k_fold_split_{idx}.pth")
         checkpoint = torch.load(args.finetune, map_location='cpu')
 
         print("Load pre-trained checkpoint from: %s" % args.finetune)
@@ -233,4 +247,6 @@ def main(args):
                           ssl_feature_dir=ssl_feature_dir)
 
 if __name__ == '__main__':
-    main()
+    args = get_args_parser()
+    args = args.parse_args()
+    main(args)
