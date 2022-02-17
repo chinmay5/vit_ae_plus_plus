@@ -26,7 +26,7 @@ def bootstrap(args, key='SETUP'):
     parser = read_config()
     args.dataset = parser['DATASET'].get('name')
     args.use_z_score = parser['DATASET'].getboolean('use_z_score')
-    # args.cross_entropy_wt = torch.as_tensor(read_float_lists(parser=parser, key='DATASET', variable='cross_entropy_wt'), dtype=torch.float)
+    args.in_channels = parser['DATASET'].getint('in_channels', fallback=2)
     args.output_dir = parser[key].get('output_dir')
     args.log_dir = parser[key].get('log_dir')
     args.epochs = parser[key].getint('epochs')
