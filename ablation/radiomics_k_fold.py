@@ -86,8 +86,8 @@ def work_on_combined_features(train_ids, test_ids, idx):
     # Concatenate the features
     assert np.all(train_labels == ssl_train_labels), "Something wrong with train labels"
     assert np.all(test_labels == ssl_test_labels), "Something wrong with test labels"
-    train_features = np.concatenate((radiomics_train_feat, train_features), axis=0)
-    test_features = np.concatenate((radiomics_test_features, test_features), axis=0)
+    train_features = np.concatenate((radiomics_train_feat, train_features), axis=1)
+    test_features = np.concatenate((radiomics_test_features, test_features), axis=1)
     # noramlize the features
     normalize_features(features=train_features)
     normalize_features(features=test_features)

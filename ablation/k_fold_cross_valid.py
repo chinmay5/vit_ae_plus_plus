@@ -23,6 +23,8 @@ from read_configs import bootstrap
 from utils import misc
 import torchio as tio
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 from utils.feature_extraction import generate_features
 
 
@@ -115,6 +117,10 @@ def main(args):
         # First we need to save these indices. This would ensure we can reproduce the results
         pickle.dump(train_ids, open(os.path.join(split_index_path, f"train_{idx}"), 'wb'))
         pickle.dump(test_ids, open(os.path.join(split_index_path, f"test_{idx}"), 'wb'))
+
+        # train_ids = pickle.load(open(os.path.join(split_index_path, f"train_{idx}"), 'rb'))
+        # test_ids = pickle.load(open(os.path.join(split_index_path, f"test_{idx}"), 'rb'))
+
         # Now we create the dataloader
         train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
         test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
@@ -124,7 +130,7 @@ def main(args):
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
-            drop_last=True,
+            drop_last=False,
         )
         # Since we want no augmentation on the test set
         data_loader_test = torch.utils.data.DataLoader(
@@ -237,8 +243,29 @@ def main(args):
         n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
         ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
+        os.makedirs(ssl_feature_dir, exist_ok=True)
         print("Model = %s" % str(model_without_ddp))
         print('number of params (M): %.2f' % (n_parameters / 1.e6))
+        # To have deterministic elements, we are going to get the dataset again with the correct indices.
+        # The indices should be placed sequentially else we run into issues once we try the combination
+        dataset_no_aug_train = torch.utils.data.Subset(dataset_whole_no_aug, train_ids)
+        dataset_no_aug_test = torch.utils.data.Subset(dataset_whole_no_aug, test_ids)
+
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_no_aug_train,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False,
+        )
+        # Since we want no augmentation on the test set
+        data_loader_test = torch.utils.data.DataLoader(
+            dataset_no_aug_test,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False
+        )
         generate_features(data_loader_train, model, device, feature_file_name=f'train_ssl_features_split_{idx}.npy',
                           label_file_name=f'train_ssl_labels_split_{idx}.npy',
                           ssl_feature_dir=ssl_feature_dir)
