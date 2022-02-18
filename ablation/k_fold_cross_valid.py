@@ -121,19 +121,19 @@ def main(args):
     for idx, (train_ids, test_ids) in enumerate(kfold_splits.split(features, labels)):
         # First we need to save these indices. This would ensure we can reproduce the results
         print(f"Starting for fold {idx}")
-        pickle.dump(train_ids, open(os.path.join(split_index_path, f"train_{idx}"), 'wb'))
-        pickle.dump(test_ids, open(os.path.join(split_index_path, f"test_{idx}"), 'wb'))
+        # pickle.dump(train_ids, open(os.path.join(split_index_path, f"train_{idx}"), 'wb'))
+        # pickle.dump(test_ids, open(os.path.join(split_index_path, f"test_{idx}"), 'wb'))
 
-        # train_ids = pickle.load(open(os.path.join(split_index_path, f"train_{idx}"), 'rb'))
-        # test_ids = pickle.load(open(os.path.join(split_index_path, f"test_{idx}"), 'rb'))
+        train_ids = pickle.load(open(os.path.join(split_index_path, f"train_{idx}"), 'rb'))
+        test_ids = pickle.load(open(os.path.join(split_index_path, f"test_{idx}"), 'rb'))
 
         # Needed for the pre-training phase
-        args.nb_classes = 2
-
-        # Now we create the dataloader
+        # args.nb_classes = 2
+        #
+        # # Now we create the dataloader
         train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
         test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
-
+        #
         data_loader_train = torch.utils.data.DataLoader(
             dataset_whole, sampler=train_subsampler,
             batch_size=args.batch_size,
@@ -149,117 +149,117 @@ def main(args):
             pin_memory=args.pin_mem,
             drop_last=False
         )
-        # We first start with the training of our vit_autoenc model
-        model = get_models(model_name='autoenc', args=args)
-
-        model.to(device)
-
-        model_without_ddp = model
-        print("Model = %s" % str(model_without_ddp))
-
-        eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
-
-        if args.lr is None:  # only base_lr is specified
-            args.lr = args.blr * eff_batch_size / 256
-
-        print("base lr: %.2e" % (args.lr * 256 / eff_batch_size))
-        print("actual lr: %.2e" % args.lr)
-
-        print("accumulate grad iterations: %d" % args.accum_iter)
-        print("effective batch size: %d" % eff_batch_size)
-
-        param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
-        optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
-        print(optimizer)
-        loss_scaler = NativeScaler()
-
-        misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
-
+        # # We first start with the training of our vit_autoenc model
+        # model = get_models(model_name='autoenc', args=args)
+        #
+        # model.to(device)
+        #
+        # model_without_ddp = model
+        # print("Model = %s" % str(model_without_ddp))
+        #
+        # eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
+        #
+        # if args.lr is None:  # only base_lr is specified
+        #     args.lr = args.blr * eff_batch_size / 256
+        #
+        # print("base lr: %.2e" % (args.lr * 256 / eff_batch_size))
+        # print("actual lr: %.2e" % args.lr)
+        #
+        # print("accumulate grad iterations: %d" % args.accum_iter)
+        # print("effective batch size: %d" % eff_batch_size)
+        #
+        # param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+        # optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
+        # print(optimizer)
+        # loss_scaler = NativeScaler()
+        #
+        # misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
+        #
         args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir, 'checkpoints')
         os.makedirs(args.output_dir, exist_ok=True)
-
-        print(f"Start training for {args.epochs} epochs")
-
-        start_time = time.time()
-        min_loss = float('inf')
-        for epoch in range(args.start_epoch, args.epochs):
-            # loss weighting for the edge maps
-            edge_map_weight = 0.01 * (1 - epoch / args.epochs)
-            train_stats = pre_train.train_one_epoch(
-                model, data_loader_train,
-                optimizer, device, epoch, loss_scaler,
-                log_writer=log_writer,
-                args=args,
-                edge_map_weight=edge_map_weight
-            )
-
-            if args.output_dir and (epoch % 50 == 0 or epoch + 1 == args.epochs):
-                misc.save_model(
-                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=epoch)
-            if train_stats['loss'] < min_loss:
-                min_loss = train_stats['loss']
-                misc.save_model(
-                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                    loss_scaler=loss_scaler, epoch=f"min_loss_k_fold_split_{idx}")
-
-            log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                         'epoch': epoch, }
-
-            if args.output_dir and misc.is_main_process():
-                if log_writer is not None:
-                    log_writer.flush()
-                with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-                    f.write(json.dumps(log_stats) + "\n")
-
-        total_time = time.time() - start_time
-        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print('Training time {}'.format(total_time_str))
-
-        # Now we would go ahead and also do the feature extraction for this split
-        del model
-        torch.cuda.empty_cache()
-        # Starting the extraction process
-        model = get_models(model_name='vit', args=args)
-        args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
-
-        args.finetune = os.path.join(args.output_dir, f"checkpoint-min_loss_k_fold_split_{idx}.pth")
-        checkpoint = torch.load(args.finetune, map_location='cpu')
-
-        print("Load pre-trained checkpoint from: %s" % args.finetune)
-        checkpoint_model = checkpoint['model']
-        state_dict = model.state_dict()
-        for k in ['head.weight', 'head.bias']:
-            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
-                print(f"Removing key {k} from pretrained checkpoint")
-                del checkpoint_model[k]
-
-        # interpolate position embedding
-        interpolate_pos_embed(model, checkpoint_model)
-
-        # load pre-trained model
-        msg = model.load_state_dict(checkpoint_model, strict=False)
-        print(msg)
-
-        model.to(device)
-
-        if args.global_pool:
-            assert set(msg.missing_keys) == {'head.weight', 'head.bias', 'fc_norm.weight', 'fc_norm.bias'}
-        else:
-            assert set(msg.missing_keys) == {'head.weight', 'head.bias'}
-
-        model_without_ddp = model
-        n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
+        #
+        # print(f"Start training for {args.epochs} epochs")
+        #
+        # start_time = time.time()
+        # min_loss = float('inf')
+        # for epoch in range(args.start_epoch, args.epochs):
+        #     # loss weighting for the edge maps
+        #     edge_map_weight = 0.01 * (1 - epoch / args.epochs)
+        #     train_stats = pre_train.train_one_epoch(
+        #         model, data_loader_train,
+        #         optimizer, device, epoch, loss_scaler,
+        #         log_writer=log_writer,
+        #         args=args,
+        #         edge_map_weight=edge_map_weight
+        #     )
+        #
+        #     if args.output_dir and (epoch % 50 == 0 or epoch + 1 == args.epochs):
+        #         misc.save_model(
+        #             args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+        #             loss_scaler=loss_scaler, epoch=epoch)
+        #     if train_stats['loss'] < min_loss:
+        #         min_loss = train_stats['loss']
+        #         misc.save_model(
+        #             args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+        #             loss_scaler=loss_scaler, epoch=f"min_loss_k_fold_split_{idx}")
+        #
+        #     log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+        #                  'epoch': epoch, }
+        #
+        #     if args.output_dir and misc.is_main_process():
+        #         if log_writer is not None:
+        #             log_writer.flush()
+        #         with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
+        #             f.write(json.dumps(log_stats) + "\n")
+        #
+        # total_time = time.time() - start_time
+        # total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+        # print('Training time {}'.format(total_time_str))
+        #
+        # # Now we would go ahead and also do the feature extraction for this split
+        # del model
+        # torch.cuda.empty_cache()
+        # # Starting the extraction process
+        # model = get_models(model_name='vit', args=args)
+        # args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
+        #
+        # args.finetune = os.path.join(args.output_dir, f"checkpoint-min_loss_k_fold_split_{idx}.pth")
+        # checkpoint = torch.load(args.finetune, map_location='cpu')
+        #
+        # print("Load pre-trained checkpoint from: %s" % args.finetune)
+        # checkpoint_model = checkpoint['model']
+        # state_dict = model.state_dict()
+        # for k in ['head.weight', 'head.bias']:
+        #     if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+        #         print(f"Removing key {k} from pretrained checkpoint")
+        #         del checkpoint_model[k]
+        #
+        # # interpolate position embedding
+        # interpolate_pos_embed(model, checkpoint_model)
+        #
+        # # load pre-trained model
+        # msg = model.load_state_dict(checkpoint_model, strict=False)
+        # print(msg)
+        #
+        # model.to(device)
+        #
+        # if args.global_pool:
+        #     assert set(msg.missing_keys) == {'head.weight', 'head.bias', 'fc_norm.weight', 'fc_norm.bias'}
+        # else:
+        #     assert set(msg.missing_keys) == {'head.weight', 'head.bias'}
+        #
+        # model_without_ddp = model
+        # n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        #
         ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
         os.makedirs(ssl_feature_dir, exist_ok=True)
-        print("Model = %s" % str(model_without_ddp))
-        print('number of params (M): %.2f' % (n_parameters / 1.e6))
-        # To have deterministic elements, we are going to get the dataset again with the correct indices.
-        # The indices should be placed sequentially else we run into issues once we try the combination
+        # print("Model = %s" % str(model_without_ddp))
+        # print('number of params (M): %.2f' % (n_parameters / 1.e6))
+        # # To have deterministic elements, we are going to get the dataset again with the correct indices.
+        # # The indices should be placed sequentially else we run into issues once we try the combination
         dataset_no_aug_train = torch.utils.data.Subset(dataset_whole_no_aug, train_ids)
         dataset_no_aug_test = torch.utils.data.Subset(dataset_whole_no_aug, test_ids)
-
+        #
         data_loader_train_feat_extr = torch.utils.data.DataLoader(
             dataset_no_aug_train,
             batch_size=args.batch_size,
@@ -275,17 +275,17 @@ def main(args):
             pin_memory=args.pin_mem,
             drop_last=False
         )
-        generate_features(data_loader_train_feat_extr, model, device, feature_file_name=f'train_ssl_features_split_{idx}.npy',
-                          label_file_name=f'train_ssl_labels_split_{idx}.npy',
-                          ssl_feature_dir=ssl_feature_dir)
-        generate_features(data_loader_test_feat_extr, model, device, feature_file_name=f'test_ssl_features_split_{idx}.npy',
-                          label_file_name=f'test_ssl_labels_split_{idx}.npy',
-                          ssl_feature_dir=ssl_feature_dir)
+        # generate_features(data_loader_train_feat_extr, model, device, feature_file_name=f'train_ssl_features_split_{idx}.npy',
+        #                   label_file_name=f'train_ssl_labels_split_{idx}.npy',
+        #                   ssl_feature_dir=ssl_feature_dir)
+        # generate_features(data_loader_test_feat_extr, model, device, feature_file_name=f'test_ssl_features_split_{idx}.npy',
+        #                   label_file_name=f'test_ssl_labels_split_{idx}.npy',
+        #                   ssl_feature_dir=ssl_feature_dir)
         #################################################################
         ###### Contrastive Training
         #################################################################
-        del model
-        torch.cuda.empty_cache()
+        # del model
+        # torch.cuda.empty_cache()
         print("Now we start with the contrastive training part")
         # A required change for using contrastive training. We want to match the feature similarity hence, obtain the features
         # directly rather than projecting them first
