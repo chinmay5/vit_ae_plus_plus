@@ -9,6 +9,8 @@ import numpy as np
 import torch
 from sklearn.model_selection import StratifiedKFold
 from timm.optim import optim_factory
+
+import fine_tune
 from utils.misc import NativeScalerWithGradNormCount as NativeScaler
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
@@ -58,6 +60,9 @@ def get_args_parser():
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=42, type=int)
+
+    parser.add_argument('--clip_grad', type=float, default=None, metavar='NORM',
+                        help='Clip gradient norm (default: None, no clipping)')
 
     parser.add_argument('--num_workers', default=8, type=int)
     parser.add_argument('--pin_mem', action='store_true',
@@ -115,11 +120,15 @@ def main(args):
     os.makedirs(split_index_path, exist_ok=True)
     for idx, (train_ids, test_ids) in enumerate(kfold_splits.split(features, labels)):
         # First we need to save these indices. This would ensure we can reproduce the results
+        print(f"Starting for fold {idx}")
         pickle.dump(train_ids, open(os.path.join(split_index_path, f"train_{idx}"), 'wb'))
         pickle.dump(test_ids, open(os.path.join(split_index_path, f"test_{idx}"), 'wb'))
 
         # train_ids = pickle.load(open(os.path.join(split_index_path, f"train_{idx}"), 'rb'))
         # test_ids = pickle.load(open(os.path.join(split_index_path, f"test_{idx}"), 'rb'))
+
+        # Needed for the pre-training phase
+        args.nb_classes = 2
 
         # Now we create the dataloader
         train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
@@ -130,7 +139,7 @@ def main(args):
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
-            drop_last=False,
+            drop_last=True,
         )
         # Since we want no augmentation on the test set
         data_loader_test = torch.utils.data.DataLoader(
@@ -251,7 +260,7 @@ def main(args):
         dataset_no_aug_train = torch.utils.data.Subset(dataset_whole_no_aug, train_ids)
         dataset_no_aug_test = torch.utils.data.Subset(dataset_whole_no_aug, test_ids)
 
-        data_loader_train = torch.utils.data.DataLoader(
+        data_loader_train_feat_extr = torch.utils.data.DataLoader(
             dataset_no_aug_train,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
@@ -259,19 +268,131 @@ def main(args):
             drop_last=False,
         )
         # Since we want no augmentation on the test set
-        data_loader_test = torch.utils.data.DataLoader(
+        data_loader_test_feat_extr = torch.utils.data.DataLoader(
             dataset_no_aug_test,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
             drop_last=False
         )
-        generate_features(data_loader_train, model, device, feature_file_name=f'train_ssl_features_split_{idx}.npy',
+        generate_features(data_loader_train_feat_extr, model, device, feature_file_name=f'train_ssl_features_split_{idx}.npy',
                           label_file_name=f'train_ssl_labels_split_{idx}.npy',
                           ssl_feature_dir=ssl_feature_dir)
-        generate_features(data_loader_test, model, device, feature_file_name=f'test_ssl_features_split_{idx}.npy',
+        generate_features(data_loader_test_feat_extr, model, device, feature_file_name=f'test_ssl_features_split_{idx}.npy',
                           label_file_name=f'test_ssl_labels_split_{idx}.npy',
                           ssl_feature_dir=ssl_feature_dir)
+        #################################################################
+        ###### Contrastive Training
+        #################################################################
+        del model
+        torch.cuda.empty_cache()
+        print("Now we start with the contrastive training part")
+        # A required change for using contrastive training. We want to match the feature similarity hence, obtain the features
+        # directly rather than projecting them first
+        args.nb_classes = -1
+
+        cointrast_log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir, 'contrast')
+        log_writer_contrast = SummaryWriter(log_dir=cointrast_log_dir)
+
+        model = get_models(model_name='contrastive', args=args)
+
+        args.finetune = os.path.join(args.output_dir, f"checkpoint-min_loss_k_fold_split_{idx}.pth")
+        checkpoint = torch.load(args.finetune, map_location='cpu')
+
+        print("Load pre-trained checkpoint from: %s" % args.finetune)
+        checkpoint_model = checkpoint['model']
+        state_dict = model.state_dict()
+        for k in ['head.weight', 'head.bias']:
+            if k in checkpoint_model and checkpoint_model[k].shape != state_dict[k].shape:
+                print(f"Removing key {k} from pretrained checkpoint")
+                del checkpoint_model[k]
+
+        # interpolate position embedding
+        interpolate_pos_embed(model, checkpoint_model)
+
+        # load pre-trained model
+        msg = model.load_state_dict(checkpoint_model, strict=False)
+        print(msg)
+
+        model.to(device)
+
+        model_without_ddp = model
+        n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        print("Model = %s" % str(model_without_ddp))
+        print('number of params (M): %.2f' % (n_parameters / 1.e6))
+
+        eff_batch_size = args.batch_size * args.accum_iter * misc.get_world_size()
+
+        if args.lr is None:  # only base_lr is specified
+            args.lr = args.blr * eff_batch_size / 256
+
+        print("base lr: %.2e" % (args.lr * 256 / eff_batch_size))
+        print("actual lr: %.2e" % args.lr)
+
+        print("accumulate grad iterations: %d" % args.accum_iter)
+        print("effective batch size: %d" % eff_batch_size)
+
+        param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+        optimizer = torch.optim.AdamW(param_groups, lr=args.lr)
+        loss_scaler = NativeScaler()
+
+        criterion = torch.nn.CosineSimilarity(dim=1).to(device)
+
+        print("criterion = %s" % str(criterion))
+
+        misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer=optimizer, loss_scaler=loss_scaler)
+
+        print(f"Start training for {args.epochs} epochs")
+        min_loss = float("inf")
+        start_time = time.time()
+        for epoch in range(args.start_epoch, args.epochs):
+            train_stats = fine_tune.contrastive_training.train_one_epoch(
+                model, criterion, data_loader_train,
+                optimizer, device, epoch, loss_scaler,
+                args.clip_grad, log_writer=log_writer_contrast,
+                args=args
+            )
+            if train_stats['loss'] < min_loss:
+                min_loss = train_stats['loss']
+                misc.save_model(
+                    args=args, model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                    loss_scaler=loss_scaler,
+                    epoch=f"contrastive_model_k_fold_split_{idx}")  # A little hack for saving model with preferred name
+            if misc.is_main_process():
+                log_writer_contrast.flush()
+        # Add a logic for saving the trained model
+
+        total_time = time.time() - start_time
+        total_time_str = str(datetime.timedelta(seconds=int(total_time)))
+        print('Training time {}'.format(total_time_str))
+
+        # Now let's extract the features
+
+        del model
+        torch.cuda.empty_cache()
+        model = get_models(model_name='contrastive', args=args)
+
+        model_path = os.path.join(args.output_dir, f'checkpoint-contrastive_model_k_fold_split_{idx}.pth')
+        print(model_path)
+        assert os.path.exists(model_path), "Please ensure a trained model alredy exists"
+        checkpoint = torch.load(model_path, map_location='cpu')
+        model.load_state_dict(checkpoint['model'])
+        model.to(device)
+
+        contrastive_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
+        os.makedirs(contrastive_feature_dir, exist_ok=True)
+
+        generate_features(data_loader_train_feat_extr, model, device,
+                          feature_file_name=f'train_contrast_ssl_features_split_{idx}.npy',
+                          label_file_name=f'train_ssl_labels_split_{idx}.npy',
+                          ssl_feature_dir=ssl_feature_dir)
+        generate_features(data_loader_test_feat_extr, model, device,
+                          feature_file_name=f'test_ssl_features_split_{idx}.npy',
+                          label_file_name=f'test_ssl_labels_split_{idx}.npy',
+                          ssl_feature_dir=ssl_feature_dir)
+
+
 
 if __name__ == '__main__':
     args = get_args_parser()

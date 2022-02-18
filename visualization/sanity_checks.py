@@ -68,6 +68,8 @@ def check_reconstruction(data_loader, model, device, log_writer=None):
         log_writer.add_images(tag='feat_set', img_tensor=output)
         log_writer.add_images(tag='input_img', img_tensor=gt_img)
         log_writer.add_images(tag='mask_img', img_tensor=mask_img)
+        # Let us also write these values on the disk
+        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", "reconstruction.npy"))
 
 
 def get_args_parser():

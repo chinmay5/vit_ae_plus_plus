@@ -62,9 +62,7 @@ def work_on_ssl_features(idx):
     test_features = np.load(os.path.join(ssl_feature_dir, f'test_ssl_features_split_{idx}.npy'))
     train_labels = np.load(os.path.join(ssl_feature_dir, f'train_ssl_labels_split_{idx}.npy'))
     test_labels = np.load(os.path.join(ssl_feature_dir, f'test_ssl_labels_split_{idx}.npy'))
-    # noramlize the features
-    # normalize_features(features=train_features)
-    # normalize_features(features=test_features)
+    # I found that normalizing features hurt performance in this case
     radiomics_pred = classification(train_features=train_features, train_label=train_labels,
                                     test_features=test_features)
     radiomics_pred = radiomics_pred[:, 1]
