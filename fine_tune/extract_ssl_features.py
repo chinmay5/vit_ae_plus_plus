@@ -65,10 +65,16 @@ def main(args):
     cudnn.benchmark = True
 
     args = bootstrap(args=args, key='EXTRACT_SSL')
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=None,
+    if args.only_test_split:
+        print("Generating features for only the test split")
+        dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
+                                   use_z_score=args.use_z_score)
+        dataset_train = None
+    else:
+        dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=None,
                                 use_z_score=args.use_z_score)
-    dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
-                               use_z_score=args.use_z_score)
+        dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
+                                   use_z_score=args.use_z_score)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
@@ -123,9 +129,10 @@ def main(args):
 
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
-    generate_features(data_loader_train, model, device, feature_file_name='train_ssl_features.npy',
-                      label_file_name='train_ssl_labels.npy',
-                      ssl_feature_dir=ssl_feature_dir)
+    if not args.only_test_split:
+        generate_features(data_loader_train, model, device, feature_file_name='train_ssl_features.npy',
+                          label_file_name='train_ssl_labels.npy',
+                          ssl_feature_dir=ssl_feature_dir)
     generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy',
                       label_file_name='test_ssl_labels.npy',
                       ssl_feature_dir=ssl_feature_dir)

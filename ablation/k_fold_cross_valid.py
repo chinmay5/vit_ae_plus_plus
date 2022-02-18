@@ -239,10 +239,10 @@ def main(args):
         ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
         print("Model = %s" % str(model_without_ddp))
         print('number of params (M): %.2f' % (n_parameters / 1.e6))
-        generate_features(data_loader_train, model, device, feature_file_name='train_ssl_features.npy',
+        generate_features(data_loader_train, model, device, feature_file_name=f'train_ssl_features_split_{idx}.npy',
                           label_file_name=f'train_ssl_labels_split_{idx}.npy',
                           ssl_feature_dir=ssl_feature_dir)
-        generate_features(data_loader_test, model, device, feature_file_name='test_ssl_features.npy',
+        generate_features(data_loader_test, model, device, feature_file_name=f'test_ssl_features_split_{idx}.npy',
                           label_file_name=f'test_ssl_labels_split_{idx}.npy',
                           ssl_feature_dir=ssl_feature_dir)
 
