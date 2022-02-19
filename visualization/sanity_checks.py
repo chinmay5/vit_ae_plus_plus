@@ -69,8 +69,8 @@ def check_reconstruction(data_loader, model, device, log_writer=None, args=None)
         log_writer.add_images(tag='input_img', img_tensor=gt_img)
         log_writer.add_images(tag='mask_img', img_tensor=mask_img)
         # Let us also write these values on the disk
-        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_reconstruction.npy"), output)
-        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_gt.npy"), gt_img)
+        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_reconstruction.npy"), output.cpu().numpy())
+        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_gt.npy"), gt_img.cpu().numpy())
 
 
 def get_args_parser():
