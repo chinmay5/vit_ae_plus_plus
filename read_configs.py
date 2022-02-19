@@ -49,4 +49,7 @@ def bootstrap(args, key='SETUP'):
     args.num_classes = parser['DATASET'].getint('num_classes')
     args.perceptual_weight = parser[key].getint('perceptual_weight', fallback=0)
     args.only_test_split = parser[key].getboolean('only_test_split', fallback=False)
+    args.common_path = parser[key].get('common_path', fallback=None)
+    args.checkpoint_perc = parser[key].get('checkpoint_perc', fallback=None)
+    args.checkpoint_contr = parser[key].get('checkpoint_contr', fallback=None)
     return args

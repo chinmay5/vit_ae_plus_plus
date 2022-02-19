@@ -19,6 +19,8 @@ radiomics_path = os.path.join(base_dir, 'data', 'radiomics_features', 'features_
 labels_path = os.path.join(base_dir, 'label_all.npy')
 
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 def load_perceptual_model(model_perc, args, device):
     args.finetune = os.path.join(PROJECT_ROOT_DIR, args.common_path, args.checkpoint_perc)
     checkpoint = torch.load(args.finetune, map_location='cpu')
@@ -69,7 +71,7 @@ def extract_contrast_feat():
     model_contrast = get_models(model_name='contrastive', args=args)
     # Let us now load the model weights for the two different models
     print("Loading contrastive model")
-    load_contrast_model(args, model_contrast)
+    load_contrast_model(args, model_contrast, device=device)
     print("Loading perceptual model")
     load_perceptual_model(model_perc=model_perc, args=args, device=device)
 
@@ -106,11 +108,13 @@ def extract_contrast_feat():
 
 
 
-def load_contrast_model(args, model_contrast):
+def load_contrast_model(args, model_contrast, device):
     model_path = os.path.join(PROJECT_ROOT_DIR, args.common_path, args.checkpoint_contr)
+    print(model_path)
     assert os.path.exists(model_path), "Please ensure a trained model alredy exists"
     checkpoint = torch.load(model_path, map_location='cpu')
     model_contrast.load_state_dict(checkpoint['model'])
+    model_contrast.to(device=device)
 
 
 def create_tsne_plot(features, labels, plot_name):
