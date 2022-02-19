@@ -35,7 +35,7 @@ def process_und_generate_mask(model, mask):
 
 
 @torch.no_grad()
-def check_reconstruction(data_loader, model, device, log_writer=None):
+def check_reconstruction(data_loader, model, device, log_writer=None, args=None):
     # switch to evaluation mode
     model.eval()
     outGT = torch.FloatTensor().to(device)
@@ -69,7 +69,8 @@ def check_reconstruction(data_loader, model, device, log_writer=None):
         log_writer.add_images(tag='input_img', img_tensor=gt_img)
         log_writer.add_images(tag='mask_img', img_tensor=mask_img)
         # Let us also write these values on the disk
-        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", "reconstruction.npy"))
+        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_reconstruction.npy"), output)
+        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_gt.npy"), gt_img)
 
 
 def get_args_parser():
@@ -179,7 +180,7 @@ def main(args):
     print("Model = %s" % str(model_without_ddp))
     print('number of params (M): %.2f' % (n_parameters / 1.e6))
     check_reconstruction(data_loader_train, model, device, log_writer=None)
-    check_reconstruction(data_loader_test, model, device, log_writer=test_writer)
+    check_reconstruction(data_loader_test, model, device, log_writer=test_writer, args=args)
 
 
 if __name__ == '__main__':
