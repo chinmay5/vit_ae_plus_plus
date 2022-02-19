@@ -221,7 +221,7 @@ def main(args):
     if args.eval:
         # we are going to extract features for test and train splits. We do not want any augmentation
         # on the training dataset
-        dataset_train_no_aug = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=None,
+        dataset_train_no_aug = get_dataset(dataset_name=args.dataset, mode=args.mode, args=args, transforms=None,
                                     use_z_score=args.use_z_score)
         data_loader_train_no_aug = torch.utils.data.DataLoader(
             dataset_train_no_aug,
