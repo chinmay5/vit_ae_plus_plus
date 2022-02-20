@@ -54,5 +54,5 @@ def bootstrap(args, key='SETUP'):
     args.checkpoint_perc = parser[key].get('checkpoint_perc', fallback=None)
     args.checkpoint_contr = parser[key].get('checkpoint_contr', fallback=None)
     args.use_only_test_dataset = parser[key].getboolean('use_only_test_dataset', fallback=False)
-
+    args.use_imagenet = parser[key].getboolean('use_imagenet', fallback=False)
     return args

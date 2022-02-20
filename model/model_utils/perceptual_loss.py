@@ -5,17 +5,21 @@ from collections import namedtuple
 
 
 class vgg_perceptual_loss(torch.nn.Module):
-    def __init__(self, requires_grad=False):
+    def __init__(self, requires_grad=False, use_imagenet=False):
         super(vgg_perceptual_loss, self).__init__()
 
-        print("Using VGG-Imagenet pretrained model for perceptual loss")
-        vgg_pretrained_model = tv.vgg16(pretrained=False)
-        model_num = 'ckp-399.pth'
-        vgg_pretrained_model.load_state_dict(
-            torch.load(f'/home/chinmayp/workspace/swav/vgg_tumor_train/checkpoints/{model_num}'), strict=False)
-        vgg_pretrained_features = vgg_pretrained_model.eval().features
+        if use_imagenet:
+            print("Using VGG-Imagenet pretrained model for perceptual loss")
+            vgg_pretrained_features = tv.vgg16(pretrained=True).eval().features
+        else:
+            print("Using VGG SSL features for training")
+            vgg_pretrained_model = tv.vgg16(pretrained=False)
+            model_num = 'ckp-399.pth'
+            vgg_pretrained_model.load_state_dict(
+                torch.load(f'/home/chinmayp/workspace/swav/vgg_tumor_train/checkpoints/{model_num}'), strict=False)
+            vgg_pretrained_features = vgg_pretrained_model.eval().features
 
-        # vgg_pretrained_features = tv.vgg16(pretrained=True).eval().features
+
 
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()

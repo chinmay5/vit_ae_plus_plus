@@ -52,7 +52,7 @@ class MaskedAutoencoderViT(nn.Module):
         self.decoder_norm = norm_layer(decoder_embed_dim)
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size ** 3 * in_chans, bias=True)  # encoder to decoder
         self.sobel_filter3D = SobelFilter3d()
-        self.perceptual_loss = vgg_perceptual_loss()
+        self.perceptual_loss = vgg_perceptual_loss(use_imagenet=args.use_imagenet)
         self.args = args
         self.perceptual_weight = 1 if self.args is None else self.args.perceptual_weight
         print(f"Using perceptual weight of {self.perceptual_weight}")

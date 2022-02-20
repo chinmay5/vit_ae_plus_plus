@@ -6,14 +6,18 @@ from sklearn import svm
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import StratifiedKFold
 
+from bootstrap.utils.classical_models import execute_models
 from environment_setup import PROJECT_ROOT_DIR
 
 
 def classification(train_features, train_label, test_features):
-    clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear', random_state=42)
-    clf.fit(train_features, train_label)
-    pred = clf.predict_proba(test_features)
-    return pred
+    # clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear', random_state=42)
+    # clf.fit(train_features, train_label)
+    # pred = clf.predict_proba(test_features)
+    # return pred
+    results = execute_models(train_features, train_label, test_features, 'svm')  # 'svm') #, 'rf', 'linear')
+    for method, preds in results.items():
+        return preds
 
 
 def min_max_normalize(vector, factor):
