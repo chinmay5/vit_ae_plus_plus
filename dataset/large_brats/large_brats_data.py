@@ -13,15 +13,22 @@ BASE_PATH = '/mnt/cat/chinmay/glioma_Bene/pre_processed'
 
 
 class MultiModalData(Dataset):
-    def __init__(self, mode, transform=None, use_z_score=False):
+    def __init__(self, mode, transform=None, use_z_score=False, split='idh'):
         super(MultiModalData).__init__()
         split_path = os.path.join(PROJECT_ROOT_DIR, 'dataset', 'large_brats')
-        filename = 'who_idh_mutation_status_ssl.pkl' if mode == 'ssl' else 'who_idh_mutation_status_annotated_mit_labels.pkl'
+        filename = self.get_filename(mode, split=split)
         self.indices = pickle.load(open(os.path.join(split_path,filename), 'rb'))
         self.transform = transform
         self.use_z_score = use_z_score
         self.has_labels = mode == 'test'
         print(f"Using z-score normalization: {use_z_score}")
+
+    def get_filename(self, mode, split='idh'):
+        if split == 'idh':
+            filename = 'who_idh_mutation_status_ssl.pkl' if mode == 'ssl' else 'who_idh_mutation_status_annotated_mit_labels.pkl'
+        elif mode == '1p19q':
+            filename = 'who_1p19q_codeletion_ssl.pkl' if mode == 'ssl' else 'correct_who_1p19q_codeletion_annotated_mit_labels.pkl'
+        return filename
 
     def __len__(self):
         return len(self.indices)
@@ -64,9 +71,9 @@ class MultiModalData(Dataset):
         return f"Pre-train Flair MRI data with transforms = {self.transform}"
 
 
-def create_the_dataset(mode, args=None, transforms=None, use_z_score=False):
+def create_the_dataset(mode, split, args=None, transforms=None, use_z_score=False):
     assert mode in ['ssl', 'test'], f"Invalid Mode selected, {mode}"
-    return MultiModalData(mode=mode, transform=transforms, use_z_score=use_z_score)
+    return MultiModalData(mode=mode, split=split, transform=transforms, use_z_score=use_z_score)
 
 
 if __name__ == '__main__':

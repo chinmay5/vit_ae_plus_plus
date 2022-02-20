@@ -47,6 +47,7 @@ def bootstrap(args, key='SETUP'):
     args.selection_type = parser['DATASET'].get('selection_type')
     args.mode = parser['DATASET'].get('mode')
     args.num_classes = parser['DATASET'].getint('num_classes')
+    args.split = parser['DATASET'].get('split', fallback='idh')
     args.perceptual_weight = parser[key].getint('perceptual_weight', fallback=0)
     args.contr_weight = parser[key].getint('contr_weight', fallback=0)
     args.only_test_split = parser[key].getboolean('only_test_split', fallback=False)

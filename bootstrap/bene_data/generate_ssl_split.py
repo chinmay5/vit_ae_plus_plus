@@ -11,13 +11,6 @@ from environment_setup import PROJECT_ROOT_DIR
 ROOT_DIR = os.path.join("/", "mnt", "cat", "chinmay", "glioma_Bene")
 SPLIT_SAVE_FILE_PATH = os.path.join(PROJECT_ROOT_DIR, "dataset", "large_brats")
 
-target_col = 'who_idh_mutation_status'
-label_converter = {
-    'Subject': str,
-    target_col: int
-}
-usecols = ['Subject', target_col]
-
 
 def choose_valid(img_path, mri_scans, has_labels):
     valid_scans = []
@@ -35,7 +28,7 @@ def choose_valid(img_path, mri_scans, has_labels):
     return valid_scans
 
 
-def read_custom_labels():
+def read_custom_labels(usecols):
     filename = os.path.join(ROOT_DIR, 'bwiestler_1_26_2022_16_29_9.csv')
     label_df = pd.read_csv(filename, index_col=0, usecols=usecols)
     labels_dict = {}
@@ -44,8 +37,13 @@ def read_custom_labels():
     return labels_dict
 
 
-def get_ssl_items(filename):
-    labels_dict = read_custom_labels()
+def get_ssl_items(filename, target_col='who_idh_mutation_status'):
+    label_converter = {
+        'Subject': str,
+        target_col: int
+    }
+    usecols = ['Subject', target_col]
+    labels_dict = read_custom_labels(usecols=usecols)
     # We get nan values as the missing entries. We can filter away the missing values now.
     ssl_mri_scans = []
     downstream_scans = []
@@ -73,5 +71,26 @@ def get_ssl_items(filename):
                 open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_annotated_mit_labels.pkl'), 'wb'))
 
 
+def refine_scans():
+    ssl_scan1 = pickle.load(open(os.path.join(SPLIT_SAVE_FILE_PATH, 'who_idh_mutation_status_ssl.pkl'), 'rb'))
+    supervised_scan2 = pickle.load(
+        open(os.path.join(SPLIT_SAVE_FILE_PATH, 'who_1p19q_codeletion_annotated_mit_labels.pkl'), 'rb'))
+    refined_scans = []
+    for item in supervised_scan2:
+        if not item[0] in ssl_scan1:
+            refined_scans.append(item)
+    # Now these are the labels our model hasn't seen before and so, we include them as the test set
+    pickle.dump(refined_scans,
+                open(os.path.join(SPLIT_SAVE_FILE_PATH, f'correct_who_1p19q_codeletion_annotated_mit_labels.pkl'),
+                     'wb'))
+
+
+def get_ssl_items_after_refinement(filename, target_col):
+    get_ssl_items(filename=filename, target_col=target_col)
+    refine_scans()
+
+
 if __name__ == '__main__':
-    get_ssl_items(filename='who_idh_mutation_status')
+    print("change the target column first")
+    # get_ssl_items(filename='who_idh_mutation_status', target_col='who_idh_mutation_status')
+    get_ssl_items_after_refinement(filename='who_1p19q_codeletion', target_col='who_1p19q_codeletion')
