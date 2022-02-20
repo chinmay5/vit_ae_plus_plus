@@ -73,7 +73,7 @@ def train_one_epoch(model: torch.nn.Module,
         with torch.cuda.amp.autocast():
             loss, pred, mask, p1, p2, z1, z2 = model(view1=sample, view2=original_volume, mask_ratio=args.mask_ratio, edge_map_weight=edge_map_weight)
 
-        contr_loss = -(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5
+        contr_loss = args.contr_weight * (-(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5)
         # This is based on our modification for weighted loss
         # loss_value = loss.item()
         weighted_loss, edge_map_loss, reconstruction_loss, perceptual_loss = loss[0], loss[1], loss[2], loss[3]
