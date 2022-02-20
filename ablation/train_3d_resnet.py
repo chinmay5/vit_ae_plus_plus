@@ -1,6 +1,7 @@
 import argparse
 import math
 import os
+import pickle
 
 from sklearn.model_selection import StratifiedKFold
 
@@ -191,12 +192,15 @@ def get_args_parser():
     return parser
 
 
-def get_all_feat_und_labels(dataset_whole):
+def get_all_feat_und_labels(dataset_whole, args):
     mri, labels = [], []
     for idx in range(len(dataset_whole)):
         mri.append(dataset_whole[idx][0])
         labels.append(dataset_whole[idx][-1])
-    return torch.cat(mri), torch.stack(labels)
+    if args.in_channels == 1:
+        return torch.cat(mri), torch.stack(labels)
+    else:
+        return torch.stack(mri), torch.stack(labels)
 
 
 def main(args):
@@ -223,11 +227,15 @@ def main(args):
     train_transforms = tio.Compose(transforms)
     dataset_whole = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=train_transforms,
                                 use_z_score=args.use_z_score)
-    features, labels = get_all_feat_und_labels(dataset_whole)
+    features, labels = get_all_feat_und_labels(dataset_whole, args=args)
     max_roc_k_fold = 0
     # Code for the K-fold cross validation
+    args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir, 'checkpoints')
+    os.makedirs(args.output_dir, exist_ok=True)
     kfold_splits = StratifiedKFold(n_splits=5, random_state=None, shuffle=False)
     for idx, (train_ids, test_ids) in enumerate(kfold_splits.split(features, labels)):
+        pickle.dump(train_ids, open(os.path.join(args.output_dir, f"train_{idx}"), 'wb'))
+        pickle.dump(test_ids, open(os.path.join(args.output_dir, f"test_{idx}"), 'wb'))
         train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
         test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
 
@@ -236,7 +244,7 @@ def main(args):
             batch_size=args.batch_size,
             num_workers=args.num_workers,
             pin_memory=args.pin_mem,
-            drop_last=True,
+            drop_last=False,
         )
 
         data_loader_test = torch.utils.data.DataLoader(
