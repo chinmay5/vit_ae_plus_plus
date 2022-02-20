@@ -52,4 +52,6 @@ def bootstrap(args, key='SETUP'):
     args.common_path = parser[key].get('common_path', fallback=None)
     args.checkpoint_perc = parser[key].get('checkpoint_perc', fallback=None)
     args.checkpoint_contr = parser[key].get('checkpoint_contr', fallback=None)
+    args.use_only_test_dataset = parser[key].getboolean('use_only_test_dataset', fallback=False)
+
     return args

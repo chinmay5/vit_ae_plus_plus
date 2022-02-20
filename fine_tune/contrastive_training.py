@@ -185,7 +185,7 @@ def main(args):
     ]
     args = bootstrap(args=args, key='CONTRASTIVE')
     train_transforms = tio.Compose(transforms)
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms,
+    dataset_train = get_dataset(dataset_name=args.dataset, mode=args.mode, args=args, transforms=train_transforms,
                                 use_z_score=args.use_z_score)
     dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
                                use_z_score=args.use_z_score)
@@ -231,7 +231,7 @@ def main(args):
             drop_last=False,
         )
         extract_features(args=args, data_loader_test=data_loader_test, data_loader_train=data_loader_train_no_aug,
-                         device=device, model=model, log_writer_train=log_writer_train)
+                         device=device, model=model, log_writer_train=log_writer_train, use_only_test_dataset=args.use_only_test_dataset)
         exit(0)
 
     args.finetune = os.path.join(PROJECT_ROOT_DIR, args.feature_extractor_load_path, "checkpoints", args.checkpoint)
@@ -317,7 +317,7 @@ def main(args):
     print('Training time {}'.format(total_time_str))
 
 
-def extract_features(args, data_loader_train, data_loader_test, device, model, log_writer_train):
+def extract_features(args, data_loader_train, data_loader_test, device, model, log_writer_train, use_only_test_dataset=False):
     model_path = os.path.join(PROJECT_ROOT_DIR, args.eval_model_path, 'checkpoint-contrastive_model.pth')
     assert os.path.exists(model_path), "Please ensure a trained model alredy exists"
     checkpoint = torch.load(model_path, map_location='cpu')
@@ -325,9 +325,10 @@ def extract_features(args, data_loader_train, data_loader_test, device, model, l
     model.to(device)
     contrastive_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
     os.makedirs(contrastive_feature_dir, exist_ok=True)
-    generate_features(data_loader_train, model, device, feature_file_name='train_contrast_ssl_features.npy',
-                      label_file_name='train_contrast_ssl_labels.npy',
-                      ssl_feature_dir=contrastive_feature_dir)
+    if not use_only_test_dataset:
+        generate_features(data_loader_train, model, device, feature_file_name='train_contrast_ssl_features.npy',
+                          label_file_name='train_contrast_ssl_labels.npy',
+                          ssl_feature_dir=contrastive_feature_dir)
     generate_features(data_loader_test, model, device, feature_file_name='test_contrast_ssl_features.npy',
                       label_file_name='test_contrast_ssl_labels.npy',
                       ssl_feature_dir=contrastive_feature_dir)

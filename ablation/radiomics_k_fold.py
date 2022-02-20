@@ -148,28 +148,28 @@ def evaluate_features():
         specificity, sensitivity = work_on_radiomics_features(train_ids=train_ids, test_ids=test_ids)
         specificity_ssl, sensitivity_ssl = work_on_ssl_features(idx=idx)
         specificity_ssl_comb, sensitivity_ssl_comb = work_on_combined_features(train_ids=train_ids, test_ids=test_ids, idx=idx)
-        specificity_ssl_contr, sensitivity_ssl_contr = work_on_contrast_features(idx=idx)
-        specificity_ssl_comb_contr, sensitivity_ssl_comb_contr = work_on_contrast_combined_features(train_ids=train_ids, test_ids=test_ids, idx=idx)
+        # specificity_ssl_contr, sensitivity_ssl_contr = work_on_contrast_features(idx=idx)
+        # specificity_ssl_comb_contr, sensitivity_ssl_comb_contr = work_on_contrast_combined_features(train_ids=train_ids, test_ids=test_ids, idx=idx)
         avg_sensitivity += sensitivity
         avg_specificity += specificity
         avg_sensitivity_ssl += sensitivity_ssl
         avg_specificity_ssl += specificity_ssl
         avg_sensitivity_comb += sensitivity_ssl_comb
         avg_specificity_comb += specificity_ssl_comb
-        avg_specificity_ssl_contr += specificity_ssl_contr
-        avg_sensitivity_ssl_contr += sensitivity_ssl_contr
-        avg_specificity_comb_contr += specificity_ssl_comb_contr
-        avg_sensitivity_comb_contr += sensitivity_ssl_comb_contr
+        # avg_specificity_ssl_contr += specificity_ssl_contr
+        # avg_sensitivity_ssl_contr += sensitivity_ssl_contr
+        # avg_specificity_comb_contr += specificity_ssl_comb_contr
+        # avg_sensitivity_comb_contr += sensitivity_ssl_comb_contr
     print("Radiomics features")
     print(f"Average specificity {avg_specificity/3} and sensitivity {avg_sensitivity/3}")
     print("SSL Features")
     print(f"Average specificity {avg_specificity_ssl/3} and sensitivity {avg_sensitivity_ssl/3}")
     print("Combined Features")
     print(f"Average specificity {avg_specificity_comb / 3} and sensitivity {avg_sensitivity_comb / 3}")
-    print("Contrast Features")
-    print(f"Average specificity {avg_specificity_ssl_contr / 3} and sensitivity {avg_sensitivity_ssl_contr / 3}")
-    print("Combined Features")
-    print(f"Average specificity {avg_specificity_comb_contr / 3} and sensitivity {avg_sensitivity_comb_contr / 3}")
+    # print("Contrast Features")
+    # print(f"Average specificity {avg_specificity_ssl_contr / 3} and sensitivity {avg_sensitivity_ssl_contr / 3}")
+    # print("Combined Features")
+    # print(f"Average specificity {avg_specificity_comb_contr / 3} and sensitivity {avg_sensitivity_comb_contr / 3}")
 
 
 if __name__ == '__main__':
