@@ -96,10 +96,10 @@ def work_on_ssl_features(train_ids, test_ids):
     return specificity, sensitivity
 
 
-def work_on_ssl_features(train_ids, test_ids):
-    ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'large_brats', 'ssl_features_dir', 'large_brats_ssl')
-    features = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
-    labels = np.load(os.path.join(ssl_feature_dir, 'test_ssl_labels.npy'))
+def work_on_contrast_ssl_features(train_ids, test_ids):
+    contr_ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'large_brats', 'ssl_features_dir', 'all_comps_large_brats')
+    features = np.load(os.path.join(contr_ssl_feature_dir, 'test_contrast_ssl_features.npy'))
+    labels = np.load(os.path.join(contr_ssl_feature_dir, 'test_contrast_ssl_labels.npy'))
     # Normalizing SSL features hurt performance. Still, double-check
     # normalize_features(features=train_features)
     # normalize_features(features=test_features)
@@ -112,6 +112,33 @@ def work_on_ssl_features(train_ids, test_ids):
     return specificity, sensitivity
 
 
+
+def work_on_combined_contr_features(train_ids, test_ids):
+    contr_ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'large_brats', 'ssl_features_dir', 'all_comps_large_brats')
+    features = np.load(os.path.join(contr_ssl_feature_dir, 'test_contrast_ssl_features.npy'))
+    labels = np.load(os.path.join(contr_ssl_feature_dir, 'test_contrast_ssl_labels.npy'))
+    train_features, test_features = features[train_ids], features[test_ids]
+    ssl_train_labels, ssl_test_labels = labels[train_ids], labels[test_ids]
+    # Include the radiomics features
+    SPLIT_SAVE_FILE_PATH = os.path.join(PROJECT_ROOT_DIR, "dataset", "large_brats")
+    radiomics_features = np.load(os.path.join(SPLIT_SAVE_FILE_PATH, 'radiomic_features_mapped.npy'))
+    all_labels = np.load(os.path.join(SPLIT_SAVE_FILE_PATH, 'radiomics_labels_mapped.npy'))
+
+    radiomics_train_feat, train_labels = radiomics_features[train_ids], all_labels[train_ids]
+    radiomics_test_features, test_labels = radiomics_features[test_ids], all_labels[test_ids]
+    # Concatenate the features
+    assert np.all(train_labels == ssl_train_labels), "Something wrong with train labels"
+    assert np.all(test_labels == ssl_test_labels), "Something wrong with test labels"
+    train_features = np.concatenate((radiomics_train_feat, train_features), axis=1)
+    test_features = np.concatenate((radiomics_test_features, test_features), axis=1)
+    # noramlize the features
+    normalize_features(features=train_features)
+    normalize_features(features=test_features)
+    radiomics_pred = classification(train_features=train_features, train_label=train_labels,
+                                    test_features=test_features)
+    radiomics_pred = radiomics_pred[:, 1]
+    specificity, sensitivity = evaluate_results(radiomics_pred=radiomics_pred, test_labels=test_labels)
+    return specificity, sensitivity
 
 def work_on_combined_features(train_ids, test_ids):
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'large_brats', 'ssl_features_dir', 'large_brats_ssl')
@@ -147,24 +174,36 @@ def evaluate_features():
     features = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
     labels = np.load(os.path.join(ssl_feature_dir, 'test_ssl_labels.npy'))
     avg_specificity, avg_sensitivity, avg_sensitivity_ssl, avg_specificity_ssl, avg_specificity_comb, avg_sensitivity_comb = 0, 0, 0, 0, 0, 0
+    avg_sensitivity_ssl_contr, avg_specificity_ssl_contr, avg_specificity_comb_contr, avg_sensitivity_comb_contr = 0, 0, 0, 0
     n_splits = 5
     skf = StratifiedKFold(n_splits=n_splits)
     for train_ids, test_ids in skf.split(features, labels):
         specificity, sensitivity = work_on_radiomics_features(train_ids=train_ids, test_ids=test_ids)
         specificity_ssl, sensitivity_ssl = work_on_ssl_features(train_ids=train_ids, test_ids=test_ids)
         specificity_ssl_comb, sensitivity_ssl_comb = work_on_combined_features(train_ids=train_ids, test_ids=test_ids)
+        specificity_ssl_contr, sensitivity_ssl_contr = work_on_contrast_ssl_features(train_ids=train_ids, test_ids=test_ids)
+        specificity_ssl_comb_contr, sensitivity_ssl_comb_contr = work_on_combined_contr_features(train_ids=train_ids, test_ids=test_ids)
         avg_sensitivity += sensitivity
         avg_specificity += specificity
         avg_sensitivity_ssl += sensitivity_ssl
         avg_specificity_ssl += specificity_ssl
         avg_sensitivity_comb += sensitivity_ssl_comb
         avg_specificity_comb += specificity_ssl_comb
+        avg_specificity_ssl_contr += specificity_ssl_contr
+        avg_sensitivity_ssl_contr += sensitivity_ssl_contr
+        avg_specificity_comb_contr += specificity_ssl_comb_contr
+        avg_sensitivity_comb_contr += sensitivity_ssl_comb_contr
     print("Radiomics features")
     print(f"Average specificity {avg_specificity/n_splits} and sensitivity {avg_sensitivity/n_splits}")
     print("SSL Features")
     print(f"Average specificity {avg_specificity_ssl/n_splits} and sensitivity {avg_sensitivity_ssl/n_splits}")
     print("Combined Features")
     print(f"Average specificity {avg_specificity_comb / n_splits} and sensitivity {avg_sensitivity_comb / n_splits}")
+    print("Contrast features")
+    print(f"Average specificity {avg_specificity_ssl_contr / n_splits} and sensitivity {avg_sensitivity_ssl_contr / n_splits}")
+    print("Contrast Combined Features")
+    print(
+        f"Average specificity {avg_specificity_comb_contr / n_splits} and sensitivity {avg_sensitivity_comb_contr / n_splits}")
 
 
 if __name__ == '__main__':
