@@ -26,8 +26,10 @@ class MultiModalData(Dataset):
     def get_filename(self, mode, split='idh'):
         if split == 'idh':
             filename = 'who_idh_mutation_status_ssl.pkl' if mode == 'ssl' else 'who_idh_mutation_status_annotated_mit_labels.pkl'
-        elif mode == '1p19q':
+        elif split == '1p19q':
             filename = 'who_1p19q_codeletion_ssl.pkl' if mode == 'ssl' else 'correct_who_1p19q_codeletion_annotated_mit_labels.pkl'
+        else:
+            raise AttributeError("Invalid split selected")
         return filename
 
     def __len__(self):
