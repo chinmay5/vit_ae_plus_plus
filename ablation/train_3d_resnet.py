@@ -141,14 +141,6 @@ def get_args_parser():
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='mae_vit_base_patch16', type=str, metavar='MODEL',
-                        help='Name of model to train')
-
-    parser.add_argument('--volume_size', default=96, type=int,
-                        help='images input size')
-
-    parser.add_argument('--in_channels', default=1, type=int,
-                        help='Number of channels in the input')
 
     parser.add_argument('--drop_path', type=float, default=0.1, metavar='PCT',
                         help='Drop path rate (default: 0.1)')
@@ -172,14 +164,6 @@ def get_args_parser():
 
     parser.add_argument('--warmup_epochs', type=int, default=5, metavar='N',
                         help='epochs to warmup LR')
-
-    parser.add_argument('--global_pool', action='store_true')
-    parser.set_defaults(global_pool=True)
-    parser.add_argument('--cls_token', action='store_false', dest='global_pool',
-                        help='Use class token instead of global pool for classification')
-
-    parser.add_argument('--nb_classes', default=2, type=int,
-                        help='number of the classification types')
 
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
@@ -237,7 +221,7 @@ def main(args):
     ]
     args = bootstrap(args=args, key='RESNET')
     train_transforms = tio.Compose(transforms)
-    dataset_whole = get_dataset(dataset_name=args.dataset, mode='whole', args=args, transforms=train_transforms,
+    dataset_whole = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=train_transforms,
                                 use_z_score=args.use_z_score)
     features, labels = get_all_feat_und_labels(dataset_whole)
     max_roc_k_fold = 0
@@ -263,7 +247,7 @@ def main(args):
             drop_last=False
         )
 
-        model = generate_model(model_depth=10, n_classes=args.num_classes, n_input_channels=1)
+        model = generate_model(model_depth=10, n_classes=args.num_classes, n_input_channels=args.in_channels)
 
         # Initialize optimizer
         args.lr = 1e-4
@@ -317,6 +301,8 @@ def main(args):
 
         max_roc_k_fold += roc_score
         print(f'Final roc value is {max_roc_k_fold / 5}')
+
+
 
 
 def select_best_model(args, epoch, loss_scaler, max_val, model, model_without_ddp, optimizer, cur_val,
