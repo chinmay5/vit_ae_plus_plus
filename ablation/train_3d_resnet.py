@@ -261,7 +261,9 @@ def main(args, train=True):
             args.lr = 1e-4
             optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
             # Loss function
-            criterion = torch.nn.CrossEntropyLoss().to(device)
+            print("-------------------------------NOTE---------------------------------------")
+            print("Using 3, 1 weight for large Brats")
+            criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([3, 1])).to(device)
 
             model.to(device)
 
@@ -365,4 +367,4 @@ if __name__ == '__main__':
     args = args.parse_args()
     # if args.output_dir:
     #     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
-    main(args, train=False)
+    main(args, train=True)
