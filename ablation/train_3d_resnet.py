@@ -338,12 +338,12 @@ def main(args, train=True):
             )
 
             model = generate_model(model_depth=10, n_classes=args.num_classes, n_input_channels=args.in_channels)
-            args.finetune = os.path.join(args.output_dir, "checkpoints",
-                                         f'best_ft_model_split{idx}')
+            args.finetune = os.path.join(args.output_dir, f'checkpoint-best_ft_model_split{idx}.pth')
             checkpoint = torch.load(args.finetune, map_location='cpu')
             print("Load pre-trained checkpoint from: %s" % args.finetune)
             checkpoint_model = checkpoint['model']
             model.load_state_dict(checkpoint_model)
+            model.to(device)
             test_stats = evaluate(data_loader_test, model, device, args=args)
             avg_sen += test_stats['sens']
             avg_spec += test_stats['spec']
