@@ -252,7 +252,11 @@ def main(args):
     min_loss = float('inf')
     for epoch in range(args.start_epoch, args.epochs):
         # loss weighting for the edge maps
-        edge_map_weight = 0.01 * (1 - epoch/args.epochs)
+        if args.use_edge_map:
+            edge_map_weight = 0
+            print("not using edge weights")
+        else:
+            edge_map_weight = 0.01 * (1 - epoch / args.epochs)
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(
