@@ -110,7 +110,7 @@ def main(args):
     # Since we do not want any augmentation on the test set.
     dataset_whole_no_aug = get_dataset(dataset_name=args.dataset, mode='whole', args=args, transforms=None,
                                        use_z_score=args.use_z_score)
-    features, labels = get_all_feat_und_labels(dataset_whole)
+    features, labels = get_all_feat_und_labels(dataset_whole, args=args)
     # Code for the K-fold cross validation
     log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir, 'logs')
     os.makedirs(log_dir, exist_ok=True)
