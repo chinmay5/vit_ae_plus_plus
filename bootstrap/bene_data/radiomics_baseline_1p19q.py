@@ -179,7 +179,7 @@ def evaluate_features():
     labels = np.load(os.path.join(ssl_feature_dir, 'test_ssl_labels.npy'))
     avg_specificity, avg_sensitivity, avg_sensitivity_ssl, avg_specificity_ssl, avg_specificity_comb, avg_sensitivity_comb = 0, 0, 0, 0, 0, 0
     avg_sensitivity_ssl_contr, avg_specificity_ssl_contr, avg_specificity_comb_contr, avg_sensitivity_comb_contr = 0, 0, 0, 0
-    n_splits = 5
+    n_splits = 10
     skf = StratifiedKFold(n_splits=n_splits)
     for train_ids, test_ids in skf.split(features, labels):
         specificity, sensitivity = work_on_radiomics_features(train_ids=train_ids, test_ids=test_ids)

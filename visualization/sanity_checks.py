@@ -6,16 +6,29 @@ from tqdm import tqdm
 from dataset.dataset_factory import get_dataset
 from read_configs import bootstrap
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import numpy as np
 import torch
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
+from PIL import Image
 
 from environment_setup import PROJECT_ROOT_DIR
 from model.model_factory import get_models
 from model.model_utils.vit_helpers import interpolate_pos_embed
+
+def save_images(input_arr, args):
+    input_arr = plot_img_util(input_arr)
+    input_arr = input_arr.cpu().numpy()
+    # removing batch dimension
+    for ch in range(args.in_channels):
+        save_path = os.path.join(PROJECT_ROOT_DIR, 'visualization', args.log_dir[args.log_dir.rfind("/") +1 :], f"{ch}")
+        os.makedirs(save_path, exist_ok=True)
+        for idx in range(input_arr.shape[1]):
+            img = input_arr[ch][idx]
+            im = Image.fromarray(img)
+            im.save(os.path.join(save_path, f"{idx}.png"))
 
 
 def plot_img_util(val_input):
@@ -45,9 +58,9 @@ def check_reconstruction(data_loader, model, device, log_writer=None, args=None)
 
     for batch in tqdm(data_loader):
         images = batch[0]
-        target = batch[-1]
+        # target = batch[-1]
         images = images.to(device, non_blocking=True)
-        target = target.to(device, non_blocking=True)
+        # target = target.to(device, non_blocking=True)
 
         # compute output
         with torch.cuda.amp.autocast():
@@ -57,11 +70,11 @@ def check_reconstruction(data_loader, model, device, log_writer=None, args=None)
             print(f"\nThe gt fraction is {(images > 0).sum() / (images.size(0) * 96 * 96 * 96)}")
             mask = process_und_generate_mask(model=model, mask=mask)
         outPRED = torch.cat((outPRED, output), 0)
-        outGT = torch.cat((outGT, target), 0)
+        # outGT = torch.cat((outGT, target), 0)
         input_img = torch.cat((input_img, images), 0)
         maskTensor = torch.cat((maskTensor, mask), 0)
 
-    if log_writer is not None:
+    if log_writer is not None and args.in_channels == 1:
         gt_img = plot_img_util(input_img[0].squeeze_().unsqueeze(1))
         output = plot_img_util(outPRED[0].squeeze_().unsqueeze(1))
         mask_img = plot_img_util(maskTensor[0].squeeze_().unsqueeze(1))
@@ -71,6 +84,9 @@ def check_reconstruction(data_loader, model, device, log_writer=None, args=None)
         # Let us also write these values on the disk
         np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_reconstruction.npy"), output.cpu().numpy())
         np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_gt.npy"), gt_img.cpu().numpy())
+    if log_writer is not None:
+        save_images(input_arr=outPRED[0], args=args)
+
 
 
 def get_args_parser():
@@ -128,17 +144,18 @@ def main(args):
 
     args = bootstrap(args=args, key='SANITY')
 
-    dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, use_z_score=args.use_z_score)
+    dataset_train = get_dataset(dataset_name=args.dataset, mode=args.mode, args=args, use_z_score=args.use_z_score)
     dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, use_z_score=args.use_z_score)
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir')
     os.makedirs(ssl_feature_dir, exist_ok=True)
 
-    sampler_train = torch.utils.data.RandomSampler(dataset_train)
+    dataset_train = torch.utils.data.Subset(dataset_train, range(128))
+    dataset_test = torch.utils.data.Subset(dataset_test, range(128))
 
     data_loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
+        dataset_train,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,

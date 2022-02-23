@@ -29,6 +29,7 @@ class SVMModel(MLModel):
 
     def execute_method(self, train_features, train_label, test_features):
         param_grid = {'C': [0.1, 1, 5, 10],
+        # param_grid = {'C': [0.1, 1, 3, 5, 7, 10],
                       'kernel': ['linear', 'rbf']}
 
         grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42, class_weight='balanced'), param_grid, refit=True, verbose=0,
