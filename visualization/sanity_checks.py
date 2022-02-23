@@ -18,17 +18,22 @@ from environment_setup import PROJECT_ROOT_DIR
 from model.model_factory import get_models
 from model.model_utils.vit_helpers import interpolate_pos_embed
 
+
 def save_images(input_arr, args):
-    input_arr = plot_img_util(input_arr)
-    input_arr = input_arr.cpu().numpy()
-    # removing batch dimension
-    for ch in range(args.in_channels):
-        save_path = os.path.join(PROJECT_ROOT_DIR, 'visualization', args.log_dir[args.log_dir.rfind("/") +1 :], f"{ch}")
-        os.makedirs(save_path, exist_ok=True)
-        for idx in range(input_arr.shape[1]):
-            img = input_arr[ch][idx]
-            im = Image.fromarray(img)
-            im.save(os.path.join(save_path, f"{idx}.png"))
+    # Let us save all the images
+    for img_index in tqdm(range(input_arr.size(0))):
+        single_img = input_arr[img_index]
+        single_img = plot_img_util(single_img)
+        single_img = single_img.cpu().numpy()
+        # removing batch dimension
+        for ch in range(args.in_channels):
+            save_path = os.path.join(PROJECT_ROOT_DIR, 'visualization', args.log_dir[args.log_dir.rfind("/") + 1:],
+                                     f"{img_index}", f"{ch}")
+            os.makedirs(save_path, exist_ok=True)
+            for idx in range(single_img.shape[1]):
+                img = single_img[ch][idx]
+                im = Image.fromarray(img)
+                im.save(os.path.join(save_path, f"{idx}.png"))
 
 
 def plot_img_util(val_input):
@@ -82,11 +87,11 @@ def check_reconstruction(data_loader, model, device, log_writer=None, args=None)
         log_writer.add_images(tag='input_img', img_tensor=gt_img)
         log_writer.add_images(tag='mask_img', img_tensor=mask_img)
         # Let us also write these values on the disk
-        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_reconstruction.npy"), output.cpu().numpy())
+        np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_reconstruction.npy"),
+                output.cpu().numpy())
         np.save(os.path.join(PROJECT_ROOT_DIR, "visualization", f"{args.log_dir}_gt.npy"), gt_img.cpu().numpy())
     if log_writer is not None:
-        save_images(input_arr=outPRED[0], args=args)
-
+        save_images(input_arr=outPRED, args=args)
 
 
 def get_args_parser():
