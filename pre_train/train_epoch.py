@@ -252,7 +252,7 @@ def main(args):
     min_loss = float('inf')
     for epoch in range(args.start_epoch, args.epochs):
         # loss weighting for the edge maps
-        if args.use_edge_map:
+        if not args.use_edge_map:
             edge_map_weight = 0
             print("not using edge weights")
         else:
