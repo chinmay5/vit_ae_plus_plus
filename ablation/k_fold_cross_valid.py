@@ -105,6 +105,7 @@ def main(args):
     ]
     args = bootstrap(args=args, key='K_FOLD')
     train_transforms = tio.Compose(transforms)
+    print(f"Masking ratio is {args.mask_ratio}")
     dataset_whole = get_dataset(dataset_name=args.dataset, mode='whole', args=args, transforms=train_transforms,
                                 use_z_score=args.use_z_score)
     # Since we do not want any augmentation on the test set.
