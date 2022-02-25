@@ -197,6 +197,7 @@ def main(args):
     args = bootstrap(args=args, key='SETUP')
     dataset_train = get_dataset(dataset_name=args.dataset, mode=args.mode, args=args, transforms=transformations, use_z_score=args.use_z_score)
     print(dataset_train)
+    print(f"Masking ratio is {args.mask_ratio}")
 
     sampler_train = torch.utils.data.RandomSampler(dataset_train)
     # if global_rank == 0 and args.log_dir is not None:

@@ -221,6 +221,7 @@ class MaskedAutoencoderViT(nn.Module):
         pred_vol, target_vol = self.unpatchify(pred), self.unpatchify(target)
         pred_edge_map, orig_input_edge_map = self.sobel_filter3D(pred_vol), self.sobel_filter3D(
             perform_3d_gaussian_blur(target_vol, blur_sigma=2))
+        raw_edge_map_loss = F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
         edge_map_loss = edge_map_weight * F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
         reconstruction_loss = ((pred - target) ** 2).mean(dim=-1)
         reconstruction_loss = (reconstruction_loss * mask).sum() / mask.sum()  # mean loss on removed patches
@@ -228,7 +229,7 @@ class MaskedAutoencoderViT(nn.Module):
         with torch.no_grad():
             percep_loss = self.perceptual_weight * self.perceptual_loss(pred_vol, target_vol)
         loss = edge_map_loss + reconstruction_loss + percep_loss
-        return [loss, edge_map_loss, reconstruction_loss, percep_loss]
+        return [loss, raw_edge_map_loss, reconstruction_loss, percep_loss]
 
     def forward(self, sample, mask_ratio=0.75, edge_map_weight=0):
         latent, mask, ids_restore = self.forward_encoder(sample, mask_ratio)
