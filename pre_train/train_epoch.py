@@ -257,7 +257,7 @@ def main(args):
             edge_map_weight = 0
             print("not using edge weights")
         else:
-            edge_map_weight = 0.01
+            edge_map_weight = 0.01 * (1 - epoch/args.epochs)
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
         train_stats = train_one_epoch(

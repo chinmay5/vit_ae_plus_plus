@@ -42,7 +42,7 @@ import json
 import torchio as tio
 
 
-def train_one_epoch(model: torch.nn.Module,
+def train_one_stage_epoch(model: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler,
                     log_writer=None,
@@ -261,7 +261,7 @@ def main(args):
         edge_map_weight = 0.01 * (1 - epoch/args.epochs)
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        train_stats = train_one_epoch(
+        train_stats = train_one_stage_epoch(
             model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,
