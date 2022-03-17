@@ -32,7 +32,7 @@ class SVMModel(MLModel):
         # param_grid = {'C': [0.1, 1, 3, 5, 7, 10],
                       'kernel': ['linear', 'rbf']}
 
-        grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42, class_weight='balanced'), param_grid, refit=True, verbose=0,
+        grid = RandomizedSearchCV(svm.SVC(probability=True, random_state=42, class_weight='balanced'), param_grid, refit=True, verbose=5,
                                   random_state=42)
         # model = svm.SVC(probability=True, random_state=42, class_weight='balanced', C=0.1)
         # model = svm.SVC(random_state=42, class_weight='balanced', probability=True, C=1, kernel='linear')

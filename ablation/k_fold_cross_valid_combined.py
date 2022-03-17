@@ -1,11 +1,10 @@
+import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import argparse
 import json
-import os
 import pickle
 import time
 import datetime
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import numpy as np
 import torch
@@ -58,7 +57,7 @@ def get_args_parser():
     parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',
                         help='epochs to warmup LR')
 
-    parser.add_argument('--device', default='cuda',
+    parser.add_argument('--device', default='cuda:0',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=42, type=int)
 
@@ -90,7 +89,8 @@ def main(args):
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
 
-    device = torch.device(args.device)
+    # device = torch.device(args.device)
+    device = torch.device("cuda:0")
 
     # fix the seed for reproducibility
     seed = args.seed + misc.get_rank()

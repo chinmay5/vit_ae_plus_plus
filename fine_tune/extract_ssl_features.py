@@ -51,7 +51,13 @@ def get_args_parser():
     return parser
 
 
-def main(args):
+def update_args(external_config_injection, args):
+    for config, value in external_config_injection.items():
+        vars(args)[config] = value
+    return args
+
+
+def main(args, external_config_injection=None):
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
 
@@ -65,6 +71,9 @@ def main(args):
     cudnn.benchmark = True
 
     args = bootstrap(args=args, key='EXTRACT_SSL')
+    # Hacky solution to handle things
+    if external_config_injection is not None:
+        args = update_args(external_config_injection=external_config_injection, args=args)
     if args.only_test_split:
         print("Generating features for only the test split")
         dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
@@ -78,6 +87,7 @@ def main(args):
 
     # Create the directory for saving the features
     ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, args.dataset, 'ssl_features_dir', args.subtype)
+    print(f"Saving directory {ssl_feature_dir}")
     os.makedirs(ssl_feature_dir, exist_ok=True)
 
     data_loader_train = torch.utils.data.DataLoader(

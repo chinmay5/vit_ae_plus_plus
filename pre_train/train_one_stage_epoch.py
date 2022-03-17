@@ -136,9 +136,6 @@ def get_args_parser():
     parser.add_argument('--model', default='contr_mae_vit_base_patch16', type=str, metavar='MODEL',
                         help='Name of model to train')
 
-    parser.add_argument('--volume_size', default=96, type=int,
-                        help='images input size')
-
     parser.add_argument('--in_channels', default=1, type=int,
                         help='Number of channels in the input')
 

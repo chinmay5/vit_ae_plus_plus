@@ -6,7 +6,7 @@ from dataset.dataset_factory import get_dataset
 from read_configs import bootstrap
 from utils.used_metrics import roc_auc
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
 import sys
 from pathlib import Path

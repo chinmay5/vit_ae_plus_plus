@@ -226,129 +226,107 @@ def main(args, train=True):
         ]
         args = bootstrap(args=args, key='RESNET')
         train_transforms = tio.Compose(transforms)
-        dataset_whole = get_dataset(dataset_name=args.dataset, mode='whole', args=args, transforms=train_transforms,
+        dataset_train = get_dataset(dataset_name=args.dataset, mode='train', args=args, transforms=train_transforms,
                                     use_z_score=args.use_z_score)
-        features, labels = get_all_feat_und_labels(dataset_whole, args=args)
-        max_roc_k_fold = 0
-        # Code for the K-fold cross validation
-        args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir, 'checkpoints')
-        os.makedirs(args.output_dir, exist_ok=True)
-        kfold_splits = StratifiedKFold(n_splits=3, random_state=None, shuffle=False)
-        for idx, (train_ids, test_ids) in enumerate(kfold_splits.split(features, labels)):
-            pickle.dump(train_ids, open(os.path.join(args.output_dir, f"train_{idx}"), 'wb'))
-            pickle.dump(test_ids, open(os.path.join(args.output_dir, f"test_{idx}"), 'wb'))
-            train_subsampler = torch.utils.data.SubsetRandomSampler(train_ids)
-            test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
+        dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
+                                    use_z_score=args.use_z_score)
 
-            data_loader_train = torch.utils.data.DataLoader(
-                dataset_whole, sampler=train_subsampler,
-                batch_size=args.batch_size,
-                num_workers=args.num_workers,
-                pin_memory=args.pin_mem,
-                drop_last=False,
+        data_loader_train = torch.utils.data.DataLoader(
+            dataset_train, shuffle=True,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False,
+        )
+
+        data_loader_test = torch.utils.data.DataLoader(
+            dataset_test, shuffle=False,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False
+        )
+
+        model = generate_model(model_depth=10, n_classes=args.num_classes, n_input_channels=args.in_channels)
+
+        # Initialize optimizer
+        args.lr = 1e-4
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+        # Loss function
+        print("-------------------------------NOTE---------------------------------------")
+        print("Using 3, 1 weight for Brats")
+        criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([3.0, 1.0])).to(device)
+
+        model.to(device)
+
+        model_without_ddp = model
+        n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+        print("Model = %s" % str(model_without_ddp))
+        print('number of params (M): %.2f' % (n_parameters / 1.e6))
+        loss_scaler = NativeScaler()
+
+        # Create the summary writers
+        args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
+        os.makedirs(args.log_dir, exist_ok=True)
+        log_writer_train = SummaryWriter(log_dir=f"{args.log_dir}/train_ft")
+        log_writer_val = SummaryWriter(log_dir=f"{args.log_dir}/val_ft")
+        # Run the training loop for defined number of epochs
+        roc_score = 0
+        for epoch in range(0, args.epochs):
+            train_stats = train_one_epoch(
+                model, criterion, data_loader_train,
+                optimizer, device, epoch, loss_scaler,
+                args.clip_grad, mix_up_fn=None,
+                log_writer=log_writer_train,
+                args=args
             )
+            # Let us record both train and val stats
+            train_val_stats = evaluate(data_loader_train, model, device, args=args)
+            test_stats = evaluate(data_loader_test, model, device, args=args)
 
-            data_loader_test = torch.utils.data.DataLoader(
-                dataset_whole, sampler=test_subsampler,
-                batch_size=args.batch_size,
-                num_workers=args.num_workers,
-                pin_memory=args.pin_mem,
-                drop_last=False
-            )
+            print(
+                f"Accuracy of the network on the {len(test_stats)} val images: {test_stats['roc_score']:.1f}%")
+            roc_score = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler,
+                                        max_val=roc_score,
+                                        model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
+                                        cur_val=test_stats['roc_score'],
+                                        model_name=f'best_ft_model_resnet')
+            # Writing the logs
+            log_writer_val.add_scalar('ft/acc', test_stats['roc_score'], epoch)
+            log_writer_val.add_scalar('ft/loss', test_stats['loss'], epoch)
+            log_writer_train.add_scalar('ft/roc_auc_score', train_val_stats['roc_score'], epoch)
+            log_writer_train.add_scalar('ft/loss', train_val_stats['loss'], epoch)
 
-            model = generate_model(model_depth=10, n_classes=args.num_classes, n_input_channels=args.in_channels)
+            # Process is complete.
+            print(f'Epoch - {epoch} complete')
 
-            # Initialize optimizer
-            args.lr = 1e-4
-            optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-            # Loss function
-            print("-------------------------------NOTE---------------------------------------")
-            print("Using 3, 1 weight for Brats")
-            criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([3.0, 1.0])).to(device)
-
-            model.to(device)
-
-            model_without_ddp = model
-            n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-            print("Model = %s" % str(model_without_ddp))
-            print('number of params (M): %.2f' % (n_parameters / 1.e6))
-            loss_scaler = NativeScaler()
-
-            # Create the summary writers
-            args.log_dir = os.path.join(PROJECT_ROOT_DIR, args.log_dir)
-            os.makedirs(args.log_dir, exist_ok=True)
-            log_writer_train = SummaryWriter(log_dir=f"{args.log_dir}/train_ft_{idx}")
-            log_writer_val = SummaryWriter(log_dir=f"{args.log_dir}/val_ft_{idx}")
-            # Run the training loop for defined number of epochs
-            roc_score = 0
-            for epoch in range(0, args.epochs):
-                train_stats = train_one_epoch(
-                    model, criterion, data_loader_train,
-                    optimizer, device, epoch, loss_scaler,
-                    args.clip_grad, mix_up_fn=None,
-                    log_writer=log_writer_train,
-                    args=args
-                )
-                # Let us record both train and val stats
-                train_val_stats = evaluate(data_loader_train, model, device, args=args)
-                test_stats = evaluate(data_loader_test, model, device, args=args)
-
-                print(
-                    f"Accuracy of the network on the {len(test_stats)} val images: {test_stats['roc_score']:.1f}%")
-                roc_score = select_best_model(args=args, epoch=epoch, loss_scaler=loss_scaler,
-                                            max_val=roc_score,
-                                            model=model, model_without_ddp=model_without_ddp, optimizer=optimizer,
-                                            cur_val=test_stats['roc_score'],
-                                            model_name=f'best_ft_model_split{idx}')
-                # Writing the logs
-                log_writer_val.add_scalar('ft/acc', test_stats['roc_score'], epoch)
-                log_writer_val.add_scalar('ft/loss', test_stats['loss'], epoch)
-                log_writer_train.add_scalar('ft/roc_auc_score', train_val_stats['roc_score'], epoch)
-                log_writer_train.add_scalar('ft/loss', train_val_stats['loss'], epoch)
-
-                # Process is complete.
-                print(f'Epoch - {epoch} complete')
-
-            print(f'Final roc value is {max_roc_k_fold / 5}')
     else:
         # We are in the evaluation mode
         print("Using Test-Only Mode")
         args = bootstrap(args=args, key='RESNET')
-        dataset_whole = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
+        dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
                                     use_z_score=args.use_z_score)
-        # features, labels = get_all_feat_und_labels(dataset_whole, args=args)
-        max_roc_k_fold = 0
         # Code for the K-fold cross validation
         args.output_dir = os.path.join(PROJECT_ROOT_DIR, args.output_dir, 'checkpoints')
         os.makedirs(args.output_dir, exist_ok=True)
-        # kfold_splits = StratifiedKFold(n_splits=5, random_state=None, shuffle=False)
-        avg_spec, avg_sen, avg_roc_score = 0, 0, 0
-        for idx in range(3):
-            train_ids = pickle.load(open(os.path.join(args.output_dir, f"train_{idx}"), 'rb'))
-            test_ids = pickle.load(open(os.path.join(args.output_dir, f"test_{idx}"), 'rb'))
-            test_subsampler = torch.utils.data.SubsetRandomSampler(test_ids)
+        data_loader_test = torch.utils.data.DataLoader(
+            dataset_test, shuffle=False,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            pin_memory=args.pin_mem,
+            drop_last=False
+        )
 
-            data_loader_test = torch.utils.data.DataLoader(
-                dataset_whole, sampler=test_subsampler,
-                batch_size=args.batch_size,
-                num_workers=args.num_workers,
-                pin_memory=args.pin_mem,
-                drop_last=False
-            )
-
-            model = generate_model(model_depth=10, n_classes=args.num_classes, n_input_channels=args.in_channels)
-            args.finetune = os.path.join(args.output_dir, f'checkpoint-best_ft_model_split{idx}.pth')
-            checkpoint = torch.load(args.finetune, map_location='cpu')
-            print("Load pre-trained checkpoint from: %s" % args.finetune)
-            checkpoint_model = checkpoint['model']
-            model.load_state_dict(checkpoint_model)
-            model.to(device)
-            test_stats = evaluate(data_loader_test, model, device, args=args)
-            avg_sen += test_stats['sens']
-            avg_spec += test_stats['spec']
-            avg_roc_score += test_stats['roc_score']
-        print(f"Specificity {avg_spec/3} and Sensitivity {avg_sen/3}")
+        model = generate_model(model_depth=10, n_classes=args.num_classes, n_input_channels=args.in_channels)
+        args.finetune = os.path.join(args.output_dir, f'checkpoint-best_ft_model_resnet.pth')
+        checkpoint = torch.load(args.finetune, map_location='cpu')
+        print("Load pre-trained checkpoint from: %s" % args.finetune)
+        checkpoint_model = checkpoint['model']
+        model.load_state_dict(checkpoint_model)
+        model.to(device)
+        test_stats = evaluate(data_loader_test, model, device, args=args)
+        print(f"Specificity {test_stats['spec']} and Sensitivity {test_stats['spec']} roc {test_stats['roc_score']}")
 
 
 

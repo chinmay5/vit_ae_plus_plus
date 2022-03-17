@@ -57,4 +57,5 @@ def bootstrap(args, key='SETUP'):
     args.use_only_test_dataset = parser[key].getboolean('use_only_test_dataset', fallback=False)
     args.use_imagenet = parser[key].getboolean('use_imagenet', fallback=False)
     args.use_edge_map = parser[key].getboolean('use_edge_map', fallback=True)
+    args.volume_size = parser['DATASET'].getint('volume_size', fallback=96)
     return args

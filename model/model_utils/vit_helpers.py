@@ -205,5 +205,5 @@ def interpolate_pos_embed(model, checkpoint_model):
 
 
 if __name__ == '__main__':
-    vals = get_3d_sincos_pos_embed(embed_dim=8, grid_size=4, cls_token=True)
+    vals = get_3d_sincos_pos_embed(embed_dim=8, grid_size=12, cls_token=True)
     print(vals.shape)

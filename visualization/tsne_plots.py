@@ -17,13 +17,13 @@ from read_configs import bootstrap
 import torchio as tio
 
 base_dir = '/mnt/cat/chinmay/brats_processed'
-radiomics_path = os.path.join(base_dir, 'data', 'radiomics_features', 'features_flair.npy')
+radiomics_dir = os.path.join(base_dir, 'data', 'radiomics_features', 'features_flair.npy')
 labels_path = os.path.join(base_dir, 'label_all.npy')
 
 split_index_path = os.path.join(PROJECT_ROOT_DIR, 'brats', 'k_fold', 'indices_file')
 
-
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 
 def load_perceptual_model(model_perc, args, device):
     args.finetune = os.path.join(PROJECT_ROOT_DIR, args.common_path, args.checkpoint_perc)
@@ -156,7 +156,6 @@ def extract_contrast_feat():
     np.save(os.path.join(feature_dir, 'perc_aug.npy'), outPRED_AUG_PER.cpu().numpy())
 
 
-
 def load_contrast_model(args, model_contrast, device):
     model_path = os.path.join(PROJECT_ROOT_DIR, args.common_path, args.checkpoint_contr)
     print(model_path)
@@ -170,16 +169,22 @@ def create_tsne_plot(plot_name):
     # labels = enc.transform(labels.reshape(-1, 1)).toarray()  # Reshaping needed by the library
     # , learning_rate='auto',
     feature_dir = os.path.join(PROJECT_ROOT_DIR, 'visualization')
-    perc_aug_feat = np.load(os.path.join(feature_dir, 'perc_aug.npy'))
-    perc_orig_feat = np.load(os.path.join(feature_dir, 'perc_orig.npy'))
+    radiomics_features = np.load(radiomics_dir)
+    test_ids = pickle.load(open(os.path.join(split_index_path, f"test_{0}"), 'rb'))
+    radiomics_test_features = radiomics_features[test_ids]
+    perc_aug_feat = np.concatenate((np.load(os.path.join(feature_dir, 'perc_aug.npy')), radiomics_test_features),
+                                   axis=1)
+    # data_2 = np.concatenate((radiomics_test_features, data_2), axis=1)
+    perc_orig_feat = np.concatenate((np.load(os.path.join(feature_dir, 'perc_orig.npy')), radiomics_test_features),
+                                    axis=1)
     feat = np.concatenate((perc_orig_feat, perc_aug_feat))
     # X_embedded = TSNE(n_components=2, init='random', verbose=True).fit_transform(perc_orig_feat)
     X_embedded = TSNE(n_components=2, init='random', verbose=True, perplexity=200, n_iter=5000).fit_transform(feat)
     plt.figure(figsize=(6, 5))
     plt.figtext = plot_name
     colors = 'r'
-    X_embedded_orig = X_embedded[0: X_embedded.shape[0]//2]
-    X_embedded_aug = X_embedded[X_embedded.shape[0] // 2: ]
+    X_embedded_orig = X_embedded[0: X_embedded.shape[0] // 2]
+    X_embedded_aug = X_embedded[X_embedded.shape[0] // 2:]
     for i in range(X_embedded_orig.shape[0]):
         plt.scatter(X_embedded_orig[i, 0], X_embedded_orig[i, 1], c=colors)
     # plt.legend()
@@ -194,10 +199,12 @@ def create_tsne_plot(plot_name):
     plt.legend()
     plt.show()
 
-#     Now the contrastive part
+    #     Now the contrastive part
     feature_dir = os.path.join(PROJECT_ROOT_DIR, 'visualization')
-    contr_aug_feat = np.load(os.path.join(feature_dir, 'cont_aug.npy'))
-    contr_orig_feat = np.load(os.path.join(feature_dir, 'cont_orig.npy'))
+    contr_aug_feat = np.concatenate((np.load(os.path.join(feature_dir, 'cont_aug.npy')), radiomics_test_features),
+                                    axis=1)
+    contr_orig_feat = np.concatenate((np.load(os.path.join(feature_dir, 'cont_orig.npy')), radiomics_test_features),
+                                     axis=1)
     feat = np.concatenate((contr_orig_feat, contr_aug_feat))
     X_embedded = TSNE(n_components=2, init='random', verbose=True, n_iter=5000, perplexity=200).fit_transform(feat)
     plt.figure(figsize=(6, 5))
@@ -234,32 +241,30 @@ def get_per_contrast_feat(radiomics):
     return train_X_combined_radiomics
 
 
-def plot_figs():
-    radiomics, labels = get_radiomics_feat()
-    create_tsne_plot(features=radiomics, labels=labels, plot_name='radiomics')
-    # Now we go for perceptual and radiomics combined
-    perc_features = get_per_feat(radiomics)
-    create_tsne_plot(features=perc_features, labels=labels, plot_name='perc+radiomics')
-    # Now we go for perceptual, contrastive and radiomics combined
-    perc_contrast_features = get_per_contrast_feat(radiomics)
-    create_tsne_plot(features=perc_contrast_features, labels=labels, plot_name='perc+contrast+radiomics')
+def sobel_viz():
+    # The method works when we do a ssh -X. Thus, it won't work with the the current pycharm config.
+    # Run it from the command life.
+    import cv2
+    img_path = os.path.join(PROJECT_ROOT_DIR, 'visualization', 'brain_crop.png')
+    image = cv2.imread(img_path)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    cv2.imshow("Gray", gray)
+    ksize = 3
+    gX = cv2.Sobel(gray, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=ksize)
+    gY = cv2.Sobel(gray, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=ksize)
+    gX = cv2.convertScaleAbs(gX)
+    gY = cv2.convertScaleAbs(gY)
+    cv2.imshow("Sobel/Scharr gX", gX)
+    cv2.waitKey(0)
+    cv2.imshow("Sobel/Scharr gY", gY)
+    cv2.waitKey(0)
+    cv2.imshow("Sobel/Scharr gY", gY)
+    combined = cv2.addWeighted(gX, 0.5, gY, -0.5, 0)
+    cv2.imshow("Sobel/Scharr Combined", combined)
+    cv2.waitKey(0)
 
-
-def get_radiomics_feat():
-    split_index_path = os.path.join(PROJECT_ROOT_DIR, 'brats', 'k_fold', 'indices_file')
-    idx = 1
-    test_ids = pickle.load(open(os.path.join(split_index_path, f"test_{idx}"), 'rb'))
-
-
-
-
-    radiomics = np.asarray(np.load(radiomics_path))
-    labels = np.load(labels_path)
-    # train_idx = np.load(os.path.join(base_dir, 'data', 'train_indices.npy'))
-    train_idx = np.load(os.path.join(base_dir, 'data', 'train_indices.npy'))
-    train_X_rad_, train_y_ = radiomics[train_idx], labels[train_idx]
-    return train_X_rad_, train_y_
 
 if __name__ == '__main__':
     # extract_contrast_feat()
     create_tsne_plot(plot_name='test')
+    # sobel_viz()

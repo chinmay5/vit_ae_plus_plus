@@ -5,6 +5,8 @@ import pickle
 import time
 import datetime
 
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
 import numpy as np
 import torch
 from sklearn.model_selection import StratifiedKFold
@@ -25,7 +27,6 @@ from read_configs import bootstrap
 from utils import misc
 import torchio as tio
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from utils.feature_extraction import generate_features
 

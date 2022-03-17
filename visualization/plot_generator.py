@@ -1,6 +1,14 @@
-import matplotlib.pyplot as plt
-import numpy as np
+import os
 
+import numpy as np
+import pandas as pd
+from numpy.random import random
+import matplotlib as mpl
+
+from environment_setup import PROJECT_ROOT_DIR
+
+mpl.rcParams['figure.dpi'] = 500
+import matplotlib.pyplot as plt
 
 def get_2d_sincos_pos_embed(embed_dim, grid_size, cls_token=False):
     """
@@ -98,32 +106,51 @@ def load_img(scan_name='MR_EGD-0774'):
     plt.show()
 
 
-def show_plot():
-    import matplotlib.pyplot as plt
-    from numpy.random import random
-    import matplotlib as mpl
-    mpl.rcParams['figure.dpi'] = 500
+def show_loss_plot():
+    df_sched = pd.read_csv(os.path.join(PROJECT_ROOT_DIR, 'visualization', 'large_brats_mit_sched.csv'))
+    df_keine_sched = pd.read_csv(os.path.join(PROJECT_ROOT_DIR, 'visualization', 'large_brats_keine_sched.csv'))
 
-    import matplotlib.pyplot as plt
-
-    lambda_ = [0.55, 0.65, 0.75, 0.85, 0.95]
-    specificity = [0.61, 0.68, 0.761, 0.667, 0.668]
-    sensitivity = [0.88, 0.84, 0.836, 0.851, 0.831]
+    # We need to read only the `Value` column.
+    df_sched_value = df_sched[['Value']]
+    df_keine_sched_value = df_keine_sched[['Value']]
 
     fig, ax = plt.subplots()
 
-    ax.plot(lambda_, specificity, color='red', marker='*', alpha=0.45, linewidth=2.2, label='Specificity')
-    ax.plot(lambda_, sensitivity, color='blue', marker='o', alpha=0.45, linewidth=2.2, label='Sensitivity')
+    ax.plot(df_sched_value, color='red', alpha=0.85, linewidth=2.2, label='w/ $\lambda_1$ decay')
+    ax.plot(df_keine_sched_value, color='blue', alpha=0.85, linewidth=2.2, label='w/o $\lambda_1$ decay')
     # ax.axis('equal')
     leg = ax.legend(fontsize=14)
     plt.title('', fontsize=14)
-    plt.xlabel('', fontsize=14)
-    plt.ylabel('score', fontsize=15)
+    plt.xlabel('epochs', fontsize=14)
+    plt.ylabel('loss', fontsize=15)
+    plt.grid(True)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.show()
+
+
+def show_mask_ratio_plot():
+    lambda_ = [0.55, 0.65, 0.75, 0.85, 0.95]
+    specificity = [0.61, 0.68, 0.761, 0.667, 0.668]
+    sensitivity = [0.88, 0.84, 0.836, 0.851, 0.831]
+    auc = [0.863, 0.873, 0.876, 0.871, 0.859]
+
+    fig, ax = plt.subplots()
+
+    ax.plot(lambda_, specificity, color='red', marker='o', alpha=0.50, linewidth=2.0, label='Specificity')
+    ax.plot(lambda_, sensitivity, color='green', marker='+', alpha=0.50, linewidth=2.0, label='Sensitivity')
+    ax.plot(lambda_, auc, color='blue', marker='*', alpha=0.55, linewidth=2.0, label='AUC')
+    ax.plot()
+    # ax.axis('equal')
+    leg = ax.legend(fontsize=14)
+    plt.title('', fontsize=14)
+    plt.xlabel('masking ratio', fontsize=14)
+    plt.ylabel('score', fontsize=14)
     plt.grid(True)
     plt.xticks(fontsize=14)
     plt.yticks(fontsize=14)
 
-    plt.show()
+    plt.show(dpi=1000)
 
 
 if __name__ == '__main__':
@@ -131,4 +158,4 @@ if __name__ == '__main__':
     # plot_f_x()
     # vals = get_2d_sincos_pos_embed(embed_dim=8, grid_size=4, cls_token=True)
     # print(vals.shape)
-    show_plot()
+    show_mask_ratio_plot()
