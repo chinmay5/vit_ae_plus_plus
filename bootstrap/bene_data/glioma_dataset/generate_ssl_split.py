@@ -47,6 +47,7 @@ def get_ssl_items(filename, target_col='who_idh_mutation_status'):
     # We get nan values as the missing entries. We can filter away the missing values now.
     ssl_mri_scans = []
     downstream_scans = []
+    all_scans = []
     for name, label in labels_dict.items():
         if np.isnan(label):
             raise AttributeError("Something is wrong")
@@ -54,12 +55,14 @@ def get_ssl_items(filename, target_col='who_idh_mutation_status'):
             ssl_mri_scans.append(f"MR_{name}")
         else:
             downstream_scans.append((f"MR_{name}", label))
+        # A modification to include all the scans. This is for subsequent projects.
+        all_scans.append(f"MR_{name}")
     # Some sanity checks
     ssl_set, downstream_set = set(ssl_mri_scans), set([x[0] for x in downstream_scans])
     assert len(ssl_set.intersection(downstream_set)) == 0, "Something wrong with the splitting, Aborting"
     print(f"Length of SSL split {len(ssl_set)}")
     print(f"Length of Supervised split {len(downstream_set)}")
-    # Let us quickly remove suuch scans that we had issues in pre-processing
+    # Let us quickly remove such scans that we had issues in pre-processing
     # print("Processing SSL Files")
     ssl_mri_scans = choose_valid(os.path.join(ROOT_DIR, 'pre_processed'), ssl_mri_scans, has_labels=False)
     # print("Processing Label Files")
@@ -69,6 +72,8 @@ def get_ssl_items(filename, target_col='who_idh_mutation_status'):
     pickle.dump(ssl_mri_scans, open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_ssl.pkl'), 'wb'))
     pickle.dump(downstream_scans,
                 open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_annotated_mit_labels.pkl'), 'wb'))
+    pickle.dump(all_scans,
+                open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_all.pkl'), 'wb'))
 
 
 def refine_scans():
@@ -92,5 +97,5 @@ def get_ssl_items_after_refinement(filename, target_col):
 
 if __name__ == '__main__':
     print("change the target column first")
-    # get_ssl_items(filename='who_idh_mutation_status', target_col='who_idh_mutation_status')
-    get_ssl_items_after_refinement(filename='who_1p19q_codeletion', target_col='who_1p19q_codeletion')
+    get_ssl_items(filename='who_idh_mutation_status', target_col='who_idh_mutation_status')
+    # get_ssl_items_after_refinement(filename='who_1p19q_codeletion', target_col='who_1p19q_codeletion')

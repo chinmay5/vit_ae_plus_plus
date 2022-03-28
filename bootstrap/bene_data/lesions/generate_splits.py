@@ -46,6 +46,8 @@ def read_labels():
     labels_df = labels_df.drop('Class', axis=1)
     train_idx, test_idx = train_test_split(labels_df, train_size=0.9, stratify=labels_df[['labels']], random_state=42)
     check_sanity(train_idx, test_idx, labels_df)
+    # Let us also store the whole label mode, which might be needed for some feature extraction
+    labels_df.to_csv(os.path.join(SPLIT_SAVE_FILE_PATH, 'whole.csv'), index=False)
     train_idx.to_csv(os.path.join(SPLIT_SAVE_FILE_PATH, 'train.csv'), index=False)
     test_idx.to_csv(os.path.join(SPLIT_SAVE_FILE_PATH, 'test.csv'), index=False)
 

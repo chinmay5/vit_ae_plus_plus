@@ -16,7 +16,7 @@ SPLIT_SAVE_FILE_PATH = os.path.join(PROJECT_ROOT_DIR, "dataset", "lesions")
 class FlairData(Dataset):
     def __init__(self, mode, transform=None, use_z_score=False):
         super(FlairData).__init__()
-        assert mode in ['train', 'test'], f"Invalid model choice. Chosen: {mode}"
+        assert mode in ['train', 'test', 'whole'], f"Invalid model choice. Chosen: {mode}"
         data_raw = np.load(os.path.join(BASE_PATH, 'lesion_array_bran.npy'))
         self.data = data_raw.transpose([4, 3, 0, 1, 2])
         self.transform = transform
@@ -78,7 +78,7 @@ if __name__ == '__main__':
             min_val = batch_data.min()
     print(f"Max value is {max_val}, min value {min_val}")
     # Also a check for other data splits
-    train_data = build_dataset(mode='test')
+    train_data = build_dataset(mode='whole')
     data_loader = torch.utils.data.DataLoader(train_data, batch_size=16)
     min_val, max_val = float("inf"), 0
     all_ones, total = 0, 0
