@@ -68,7 +68,7 @@ class MultiModalData(Dataset):
             label = torch.tensor(self.indices[item][1])
         else:
             volume = torch.tensor(self.load_volume(self.indices[item]), dtype=torch.float)
-            label = ''  # Since collate_fn does not work with `None`
+            label = torch.tensor(-100)  # Since collate_fn does not work with `None`
         original_volume = self._normalize_data(volume.clone())
         if self.transform is not None:
             volume = self.transform(volume)
