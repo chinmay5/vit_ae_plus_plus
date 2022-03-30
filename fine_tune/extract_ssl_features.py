@@ -76,8 +76,7 @@ def main(args, external_config_injection=None):
         args = update_args(external_config_injection=external_config_injection, args=args)
     if args.only_test_split:
         print("Generating features for only the test split")
-        # dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
-        dataset_test = get_dataset(dataset_name=args.dataset, mode='whole', args=args, transforms=None,
+        dataset_test = get_dataset(dataset_name=args.dataset, mode='test', args=args, transforms=None,
                                    use_z_score=args.use_z_score)
         dataset_train = None
     else:

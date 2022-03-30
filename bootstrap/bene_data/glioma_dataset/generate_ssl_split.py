@@ -37,6 +37,55 @@ def read_custom_labels(usecols):
     return labels_dict
 
 
+def get_ssl_items_modified(filename, target_col='who_idh_mutation_status'):
+    # This particular function is created explicitly for our subsequent project on radiomics graphs and not
+    # directly related to ViT3D.
+    df_val = pd.read_csv(os.path.join('/home/chinmayp/workspace/graph_bene', 'dataset', 'split_files', 'val.csv'), index_col=0)
+    df_test = pd.read_csv(os.path.join('/home/chinmayp/workspace/graph_bene', 'dataset', 'split_files', 'test.csv'), index_col=0)
+    invalid_indices = set(df_val.index)
+    invalid_indices.update(df_test.index)
+    usecols = ['Subject', target_col]
+    labels_dict = read_custom_labels(usecols=usecols)
+    # We get nan values as the missing entries. We can filter away the missing values now.
+    ssl_mri_scans = []
+    downstream_scans = []
+    all_scans = []
+    all_train_scans = []
+    for name, label in labels_dict.items():
+        if np.isnan(label):
+            raise AttributeError("Something is wrong")
+        if label == -1:
+            ssl_mri_scans.append(f"MR_{name}")
+        else:
+            downstream_scans.append((f"MR_{name}", label))
+        # Check if the scan should go in our training + SSL set
+        if f"MR_{name}" not in invalid_indices:
+            all_train_scans.append(f"MR_{name}")
+        # A modification to include all the scans. This is for subsequent projects.
+        all_scans.append(f"MR_{name}")
+    # Some sanity checks
+    ssl_set, downstream_set = set(ssl_mri_scans), set([x[0] for x in downstream_scans])
+    assert len(ssl_set.intersection(downstream_set)) == 0, "Something wrong with the splitting, Aborting"
+    print(f"Length of SSL split {len(ssl_set)}")
+    print(f"Length of Supervised split {len(downstream_set)}")
+    # Let us quickly remove such scans that we had issues in pre-processing
+    # print("Processing SSL Files")
+    ssl_mri_scans = choose_valid(os.path.join(ROOT_DIR, 'pre_processed'), ssl_mri_scans, has_labels=False)
+    # print("Processing Label Files")
+    downstream_scans = choose_valid(os.path.join(ROOT_DIR, 'pre_processed'), downstream_scans, has_labels=True)
+    print(f"Length of SSL split {len(ssl_mri_scans)}")
+    print(f"Length of Supervised split {len(downstream_scans)}")
+    print(f"Length of Combined train split {len(all_train_scans)}")
+    pickle.dump(ssl_mri_scans, open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_ssl.pkl'), 'wb'))
+    pickle.dump(downstream_scans,
+                open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_annotated_mit_labels.pkl'), 'wb'))
+    pickle.dump(all_scans,
+                open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_all.pkl'), 'wb'))
+
+    pickle.dump(all_train_scans,
+                open(os.path.join(SPLIT_SAVE_FILE_PATH, f'{filename}_all_train.pkl'), 'wb'))
+
+
 def get_ssl_items(filename, target_col='who_idh_mutation_status'):
     label_converter = {
         'Subject': str,
@@ -97,5 +146,6 @@ def get_ssl_items_after_refinement(filename, target_col):
 
 if __name__ == '__main__':
     print("change the target column first")
-    get_ssl_items(filename='who_idh_mutation_status', target_col='who_idh_mutation_status')
+    # get_ssl_items(filename='who_idh_mutation_status', target_col='who_idh_mutation_status')
+    get_ssl_items_modified(filename='who_idh_mutation_status', target_col='who_idh_mutation_status')
     # get_ssl_items_after_refinement(filename='who_1p19q_codeletion', target_col='who_1p19q_codeletion')

@@ -19,7 +19,8 @@ class MultiModalData(Dataset):
         self.idh_mode_filename_map = {
             "ssl": 'who_idh_mutation_status_ssl.pkl',
             "test": 'who_idh_mutation_status_annotated_mit_labels.pkl',
-            "whole": "who_idh_mutation_status_all.pkl"
+            "whole": "who_idh_mutation_status_all.pkl",
+            "whole_train": "who_idh_mutation_status_all_train.pkl"
         }
         filename = self.get_filename(mode, split=split)
         self.indices = pickle.load(open(os.path.join(split_path, filename), 'rb'))
@@ -42,7 +43,6 @@ class MultiModalData(Dataset):
 
     def _normalize_data(self, volume):
         if self.use_z_score:
-            # Since this is a single channel image so, we can ignore the `axis` parameter
             return (volume - torch.mean(volume, dim=[1, 2, 3], keepdim=True)) / sqrt(
                 torch.var(volume, dim=[1, 2, 3], keepdim=True))
         max_val, min_val = volume.max(), volume.min()
@@ -80,7 +80,7 @@ class MultiModalData(Dataset):
 
 
 def create_the_dataset(mode, split, args=None, transforms=None, use_z_score=False):
-    assert mode in ['ssl', 'test', 'whole'], f"Invalid Mode selected, {mode}"
+    assert mode in ['ssl', 'test', 'whole', 'whole_train'], f"Invalid Mode selected, {mode}"
     return MultiModalData(mode=mode, split=split, transform=transforms, use_z_score=use_z_score)
 
 
@@ -93,7 +93,7 @@ if __name__ == '__main__':
     ]
     transformations = tio.Compose(transforms)
 
-    data = create_the_dataset(mode='whole', split='idh')
+    data = create_the_dataset(mode='whole_train', split='idh')
     print(len(data))
     data_loader = torch.utils.data.DataLoader(data, batch_size=4)
     min_val, max_val = float("inf"), 0
