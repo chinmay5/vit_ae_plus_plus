@@ -2,13 +2,13 @@ from functools import partial
 
 import torch
 from torch import nn
-import numpy as np
+import torch.nn.functional as F
 
+from model.model_utils.gaussian_filter import perform_3d_gaussian_blur
+from model.model_utils.perceptual_loss import vgg_perceptual_loss
+from model.model_utils.sobel_filter import SobelFilter3d
 from model.model_utils.vit_helpers import get_3d_sincos_pos_embed
 from model.vit import PatchEmbed3D, Block
-
-
-
 
 
 class MaskedAutoencoderViT(nn.Module):
@@ -18,7 +18,7 @@ class MaskedAutoencoderViT(nn.Module):
     def __init__(self, volume_size=224, patch_size=16, in_chans=3,
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
-                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False, args=None):
         super().__init__()
 
         # --------------------------------------------------------------------------
@@ -29,7 +29,7 @@ class MaskedAutoencoderViT(nn.Module):
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim),
                                       requires_grad=False)  # fixed sin-cos embedding
-
+        self.embed_dim = embed_dim
         self.blocks = nn.ModuleList([
             Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
             for i in range(depth)])
@@ -51,23 +51,29 @@ class MaskedAutoencoderViT(nn.Module):
 
         self.decoder_norm = norm_layer(decoder_embed_dim)
         self.decoder_pred = nn.Linear(decoder_embed_dim, patch_size ** 3 * in_chans, bias=True)  # encoder to decoder
+        self.sobel_filter3D = SobelFilter3d()
+        self.perceptual_loss = vgg_perceptual_loss(use_imagenet=args.use_imagenet)
+        self.args = args
+        self.perceptual_weight = 1 if self.args is None else self.args.perceptual_weight
+        print(f"Using perceptual weight of {self.perceptual_weight}")
+
         # --------------------------------------------------------------------------
 
         self.norm_pix_loss = norm_pix_loss
-
         self.initialize_weights()
 
     def initialize_weights(self):
         # initialization
         # initialize (and freeze) pos_embed by sin-cos embedding
-        pos_embed = get_3d_sincos_pos_embed(self.pos_embed.shape[-1], round(self.patch_embed.num_patches ** (1/3)), #int(self.patch_embed.num_patches ** (1/3)),
+        pos_embed = get_3d_sincos_pos_embed(self.pos_embed.shape[-1], round(self.patch_embed.num_patches ** (1 / 3)),
+                                            # int(self.patch_embed.num_patches ** (1/3)),
                                             cls_token=True)
         self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
         # decoder_pos_embed = get_3d_sincos_pos_embed(self.decoder_pos_embed.shape[-1],
         #                                             int(self.patch_embed.num_patches ** .5), cls_token=True)
         decoder_pos_embed = get_3d_sincos_pos_embed(self.decoder_pos_embed.shape[-1],
-                                                    round(self.patch_embed.num_patches ** (1/3)), cls_token=True)
+                                                    round(self.patch_embed.num_patches ** (1 / 3)), cls_token=True)
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
         # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
@@ -97,9 +103,10 @@ class MaskedAutoencoderViT(nn.Module):
         x: (N, L, patch_size**3 *3)
         """
         p = self.patch_embed.patch_size[0]  # Patch size
-        assert volume.shape[2] == volume.shape[3] == volume.shape[4] and volume.shape[2] % p == 0  # Ensuring we have the same dimension
+        assert volume.shape[2] == volume.shape[3] == volume.shape[4] and volume.shape[
+            2] % p == 0  # Ensuring we have the same dimension
 
-        h = w = l = volume.shape[2] // p  # Since volumes have the same dimension. Possible limitation??
+        l = h = w = volume.shape[2] // p  # Since volumes have the same dimension. Possible limitation??
         x = volume.reshape(shape=(volume.shape[0], -1, l, p, h, p, w, p))
         x = torch.einsum('nclrhpwq->nlhwrpqc', x)
         x = x.reshape(shape=(volume.shape[0], l * h * w, -1))
@@ -111,10 +118,11 @@ class MaskedAutoencoderViT(nn.Module):
         imgs: (N, 3, H, W)
         """
         p = self.patch_embed.patch_size[0]
-        l = h = w = round(x.shape[1] ** (1/3))
+        l = h = w = round(x.shape[1] ** (1 / 3))
         assert l * h * w == x.shape[1]
 
-        x = x.reshape(shape=(x.shape[0], l, h, w, p, p, p, -1))  # Earlier 3 was hard-coded here. Maybe this way, we are more flexible with the number of channels
+        x = x.reshape(shape=(x.shape[0], l, h, w, p, p, p,
+                             -1))  # Earlier 3 was hard-coded here. Maybe this way, we are more flexible with the number of channels
         x = torch.einsum('nlhwrpqc->nclrhpwq', x)
         volume = x.reshape(shape=(x.shape[0], -1, h * p, h * p, h * p))
         return volume
@@ -194,7 +202,7 @@ class MaskedAutoencoderViT(nn.Module):
 
         return x
 
-    def forward_loss(self, imgs, pred, mask):
+    def forward_loss(self, imgs, pred, mask, edge_map_weight=0):
         """
         imgs: [N, 3, H, W]
         pred: [N, L, p*p*3]
@@ -206,17 +214,72 @@ class MaskedAutoencoderViT(nn.Module):
             var = target.var(dim=-1, keepdim=True)
             target = (target - mean) / (var + 1.e-6) ** .5
 
-        loss = (pred - target) ** 2
-        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        loss = self.get_weighted_loss(pred, target, mask, edge_map_weight=edge_map_weight)
         return loss
 
-    def forward(self, imgs, mask_ratio=0.75):
-        latent, mask, ids_restore = self.forward_encoder(imgs, mask_ratio)
+    def get_weighted_loss(self, pred, target, mask, edge_map_weight=0):
+        pred_vol, target_vol = self.unpatchify(pred), self.unpatchify(target)
+        pred_edge_map, orig_input_edge_map = self.sobel_filter3D(pred_vol), self.sobel_filter3D(
+            perform_3d_gaussian_blur(target_vol, blur_sigma=2))
+        raw_edge_map_loss = F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
+        edge_map_loss = edge_map_weight * F.mse_loss(pred_edge_map, orig_input_edge_map, reduction="mean")
+        reconstruction_loss = ((pred - target) ** 2).mean(dim=-1)
+        reconstruction_loss = (reconstruction_loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        # Including the perceptual loss
+        with torch.no_grad():
+            percep_loss = self.perceptual_weight * self.perceptual_loss(pred_vol, target_vol)
+        loss = edge_map_loss + reconstruction_loss + percep_loss
+        return [loss, raw_edge_map_loss, reconstruction_loss, percep_loss]
+
+    def forward(self, sample, mask_ratio=0.75, edge_map_weight=0):
+        latent, mask, ids_restore = self.forward_encoder(sample, mask_ratio)
         pred = self.forward_decoder(latent, ids_restore)  # [N, L, p*p*3]
-        loss = self.forward_loss(imgs, pred, mask)
+        loss = self.forward_loss(sample, pred, mask, edge_map_weight=edge_map_weight)
         return loss, pred, mask
+
+
+class ContrastiveMAEViT(MaskedAutoencoderViT):
+    def __init__(self, volume_size=224, patch_size=16, in_chans=3,
+                 embed_dim=1024, depth=24, num_heads=16,
+                 decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
+                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False, args=None, use_proj=False):
+        super().__init__(volume_size=volume_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, depth=depth,
+                         num_heads=num_heads, decoder_num_heads=decoder_num_heads, decoder_embed_dim=decoder_embed_dim,
+                         decoder_depth=decoder_depth, mlp_ratio=mlp_ratio, norm_layer=norm_layer, norm_pix_loss=norm_pix_loss, args=args)
+
+        # build a 3-layer projector
+        self.use_proj = use_proj
+        if use_proj:
+            self.projection_head = nn.Sequential(nn.Linear(self.embed_dim, self.embed_dim, bias=False),
+                                                 nn.BatchNorm1d(self.embed_dim),
+                                                 nn.ReLU(inplace=True),  # first layer
+                                                 nn.Linear(self.embed_dim, self.embed_dim, bias=False),
+                                                 nn.BatchNorm1d(self.embed_dim),
+                                                 nn.ReLU(inplace=True),  # second layer
+                                                 nn.Linear(self.embed_dim, self.embed_dim, bias=False),
+                                                 nn.BatchNorm1d(self.embed_dim, affine=False))  # output layer
+        self.predictor = nn.Sequential(
+            nn.Linear(self.embed_dim, self.embed_dim, bias=False),
+            nn.BatchNorm1d(self.embed_dim),
+            nn.ReLU(inplace=True),  # hidden layer
+            nn.Linear(self.embed_dim, self.embed_dim)  # output layer
+        )
+
+    def forward(self, view1, view2, mask_ratio=0.75, edge_map_weight=0):
+        # First call the forward method of the autoencoder
+        latent1, mask, ids_restore = super(ContrastiveMAEViT, self).forward_encoder(view1, mask_ratio)
+        pred = super(ContrastiveMAEViT, self).forward_decoder(latent1, ids_restore)  # [N, L, p*p*3]
+        loss = super(ContrastiveMAEViT, self).forward_loss(view1, pred, mask, edge_map_weight=edge_map_weight)
+
+        # Call the encoder for the second view
+        latent2, _, _ = self.forward_encoder(view2, mask_ratio)
+        # Now, we perform the contrastive part on the embeddings
+        # First we reshape the tensors so that they can be handled easily
+        latent1 = latent1.view(-1, latent1.shape[2])
+        latent2 = latent2.view(-1, latent2.shape[2])
+        p1 = self.predictor(latent1)
+        p2 = self.predictor(latent2)
+        return loss, pred, mask, p1, p2, latent1.detach(), latent2.detach()
 
 
 def mae_vit_large_patch16_dec512d8b(**kwargs):
@@ -226,8 +289,16 @@ def mae_vit_large_patch16_dec512d8b(**kwargs):
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
+
 def mae_vit_base_patch16_dec512d8b(**kwargs):
     model = MaskedAutoencoderViT(
+        embed_dim=768, depth=12, num_heads=12,
+        decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
+        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    return model
+
+def contr_mae_vit_base_patch16_dec512d8b(**kwargs):
+    model = ContrastiveMAEViT(
         embed_dim=768, depth=12, num_heads=12,
         decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
@@ -236,66 +307,15 @@ def mae_vit_base_patch16_dec512d8b(**kwargs):
 # set recommended archs
 mae_vit_base_patch16 = mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
-
-
-def _viz_one_patch(model):
-    from matplotlib import pyplot as plt
-    import os
-    import nibabel as nib
-    from environment_setup import PROJECT_ROOT_DIR
-
-    # def show_image(image, title=''):
-    #     # image is [H, W, 3]
-    #     assert image.shape[2] == 1
-    #     plt.imshow(torch.clip(image * 255, 0, 255).int())
-    #     plt.title(title, fontsize=16)
-    #     plt.axis('off')
-    #     return
-
-    BASE_PATH = '/mnt/cat/chinmay/brats_processed/data/image'
-
-
-    file_path = os.path.join(BASE_PATH, 'flair_all.npy')
-    data = np.load(file_path)
-    one_sample = data.transpose([0, 4, 1, 2, 3])[0:1]
-    x = torch.as_tensor(one_sample, dtype=torch.float)
-    # make it a batch-like
-
-    # run MAE
-    loss, y, mask = model(x.float(), mask_ratio=0.75)
-    y = model.unpatchify(y)
-
-    # visualize the mask
-    mask = mask.detach()
-    mask = mask.unsqueeze(-1).repeat(1, 1, model.patch_embed.patch_size[0] ** 3 * 1)  # (N, L*H*W, p*p*1) 1=num_channel
-    mask = model.unpatchify(mask)  # 1 is removing, 0 is keeping
-    mask = torch.einsum('nclhw->nlhwc', mask).detach().cpu()
-
-    x = torch.einsum('nclhw->nlhwc', x)
-
-    # masked image
-    im_masked = x * (1 - mask)
-
-    # plt.subplot(1, 4, 1)
-    # show_image(x[0][0], "original")
-
-    # plt.subplot(1, 4, 2)
-    # show_image(im_masked[0][0], "masked")
-
-    # plt.show()
-    save_path = os.path.join(PROJECT_ROOT_DIR, 'temp')
-    os.makedirs(save_path, exist_ok=True)
-    img = nib.Nifti1Image(im_masked.numpy()[0].astype(np.int8), np.eye(4))
-    print("File saving started")
-    nib.save(img, os.path.join(save_path, 'test4d.nii.gz'))
-    # nib.save(img, os.path.join('build', 'test4d.nii.gz'))
-
+contr_mae_vit_base_patch16 = contr_mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 
 if __name__ == '__main__':
     image_size = (96, 96, 96)
-    model = mae_vit_base_patch16(volume_size=image_size, in_chans=1, patch_size=8)
-    sample_img = torch.randn(8, 1, 96, 96, 96)
-    loss, pred, mask = model(sample_img)
+    model = contr_mae_vit_base_patch16(volume_size=image_size, in_chans=3, patch_size=8)
+    sample_img = torch.randn(8, 3, 96, 96, 96)
+    loss, pred, mask, p1, p2, z1, z2 = model(sample_img, sample_img)
     print(pred.shape)
-    print(loss.item())
-    _viz_one_patch(model=model)
+    print(loss[0].item())
+    print(loss[1].item())
+    print(loss[2].item())
+    print(loss[3].item())

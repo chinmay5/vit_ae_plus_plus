@@ -42,7 +42,7 @@ import json
 import torchio as tio
 
 
-def train_one_epoch(model: torch.nn.Module,
+def train_one_stage_epoch(model: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler,
                     log_writer=None,
@@ -53,7 +53,7 @@ def train_one_epoch(model: torch.nn.Module,
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 20
-
+    criterion = torch.nn.CosineSimilarity(dim=1).to(device)
     accum_iter = args.accum_iter
 
     optimizer.zero_grad()
@@ -61,25 +61,28 @@ def train_one_epoch(model: torch.nn.Module,
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    for data_iter_step, (sample, _, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (sample, original_volume, _) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
 
         # we use a per iteration (instead of per epoch) lr scheduler
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
         sample = sample.to(device, non_blocking=True)
+        original_volume = original_volume.to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            loss, _, _ = model(sample=sample, mask_ratio=args.mask_ratio, edge_map_weight=edge_map_weight)
+            loss, pred, mask, p1, p2, z1, z2 = model(view1=sample, view2=original_volume, mask_ratio=args.mask_ratio, edge_map_weight=edge_map_weight)
 
+        contr_loss = args.contr_weight * (-(criterion(p1, z2).mean() + criterion(p2, z1).mean()) * 0.5)
         # This is based on our modification for weighted loss
         # loss_value = loss.item()
         weighted_loss, edge_map_loss, reconstruction_loss, perceptual_loss = loss[0], loss[1], loss[2], loss[3]
-        loss = loss[0]
+        loss = loss[0] + contr_loss
         loss_value = loss.item()
         metric_logger.update(edge_map_loss=edge_map_loss)
         metric_logger.update(reconstruction_loss=reconstruction_loss)
         metric_logger.update(perceptual_loss=perceptual_loss)
+        metric_logger.update(contr_loss=contr_loss)
 
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
@@ -103,6 +106,8 @@ def train_one_epoch(model: torch.nn.Module,
         reconstruction_loss_value_reduce = misc.all_reduce_mean(reconstruction_loss)
         edge_map_loss_value_reduce = misc.all_reduce_mean(edge_map_loss)
         perceptual_loss_loss_value_reduce = misc.all_reduce_mean(perceptual_loss)
+        contr_loss_value_reduce = misc.all_reduce_mean(contr_loss)
+
         if log_writer is not None and (data_iter_step + 1) % accum_iter == 0:
             """ We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.
@@ -114,6 +119,7 @@ def train_one_epoch(model: torch.nn.Module,
             log_writer.add_scalar('reconstruction_loss', reconstruction_loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('sobel_loss', edge_map_loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('perceptual_loss', perceptual_loss_loss_value_reduce, epoch_1000x)
+            log_writer.add_scalar('contr_loss', contr_loss_value_reduce, epoch_1000x)
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -127,11 +133,8 @@ def get_args_parser():
                         help='Accumulate gradient iterations (for increasing the effective batch size under memory constraints)')
 
     # Model parameters
-    parser.add_argument('--model', default='mae_vit_base_patch16', type=str, metavar='MODEL',
+    parser.add_argument('--model', default='contr_mae_vit_base_patch16', type=str, metavar='MODEL',
                         help='Name of model to train')
-
-    parser.add_argument('--volume_size', default=96, type=int,
-                        help='images input size')
 
     parser.add_argument('--in_channels', default=1, type=int,
                         help='Number of channels in the input')
@@ -197,7 +200,6 @@ def main(args):
     args = bootstrap(args=args, key='SETUP')
     dataset_train = get_dataset(dataset_name=args.dataset, mode=args.mode, args=args, transforms=transformations, use_z_score=args.use_z_score)
     print(dataset_train)
-    print(f"Masking ratio is {args.mask_ratio}")
 
     sampler_train = torch.utils.data.RandomSampler(dataset_train)
     # if global_rank == 0 and args.log_dir is not None:
@@ -253,14 +255,10 @@ def main(args):
     min_loss = float('inf')
     for epoch in range(args.start_epoch, args.epochs):
         # loss weighting for the edge maps
-        if not args.use_edge_map:
-            edge_map_weight = 0
-            print("not using edge weights")
-        else:
-            edge_map_weight = 0.01 * (1 - epoch/args.epochs)
+        edge_map_weight = 0.01 * (1 - epoch/args.epochs)
         if args.distributed:
             data_loader_train.sampler.set_epoch(epoch)
-        train_stats = train_one_epoch(
+        train_stats = train_one_stage_epoch(
             model, data_loader_train,
             optimizer, device, epoch, loss_scaler,
             log_writer=log_writer,

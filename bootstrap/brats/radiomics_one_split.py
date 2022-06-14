@@ -1,15 +1,15 @@
-import numpy as np
-from sklearn import svm, datasets
 import os
+
+import numpy as np
 from sklearn import metrics
+from sklearn import svm
+
+from environment_setup import PROJECT_ROOT_DIR
+
 os.environ["CUDA_VISIBLE_DEVICES"]="0"
-from sklearn.model_selection import StratifiedKFold, KFold, train_test_split
 import matplotlib.pyplot as plt
-from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.metrics import confusion_matrix
-from sklearn.model_selection import StratifiedKFold
-import random
-from sklearn.decomposition import PCA
+
 
 def read_csv(name):
     features = []
@@ -55,9 +55,9 @@ for ii in range(np.shape(f)[1]):
 # print(np.shape(radiomics))
 labels = np.load(labels_path)
 
-# Getting indices of the train and test splits
-indices = np.arange(radiomics.shape[0])
-train_idx, test_idx = train_test_split(indices, train_size=0.8, stratify=labels, random_state=42)
+train_idx = np.load(os.path.join(base_dir, 'data', 'train_indices.npy'))
+test_idx = np.load(os.path.join(base_dir, 'data', 'test_indices.npy'))
+
 train_X_rad_, test_X_rad_ = radiomics[train_idx], radiomics[test_idx]
 train_X_ssl_, test_X_ssl_ = f[train_idx], f[test_idx]
 train_X_ssl_KMS_, test_X_ssl_KMS_ = f_2[train_idx], f_2[test_idx]
@@ -78,15 +78,9 @@ np.save(test_indices_save_path, test_idx)
 def classification(train_features, train_label, test_features):
    # lin_clf = svm.LinearSVC()
    # lin_clf.fit(train_features, train_label)
-    clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear',)
+    clf = svm.SVC(gamma='auto', C=1, class_weight='balanced', probability=True, kernel='linear',random_state=42)
     clf.fit(train_features, train_label)
-    # svm.SVC(C=100.0, cache_size=200, class_weight=False, coef0=0.0,
-    # decision_function_shape='ovr', degree=3, gamma='auto', kernel='linear',
-    # max_iter=-1, probability=False, random_state=None, shrinking=True,
-    # tol=0.001, verbose=False)
-    #clf.probability = True
     pred = clf.predict_proba(test_features)
-    #pred = clf.predict(test_features)
     return pred
 
 train_X_combined_ = np.concatenate((train_X_rad_, train_X_ssl_), axis=-1)
@@ -110,6 +104,7 @@ temp_pred_combined_2 = classification(train_features=train_X_combined_2_, train_
 temp_pred_combined_3 = classification(train_features=train_X_combined_3_, train_label=train_y_, test_features=test_X_combined_3_)
 #   temp_pred_combined_3 = classification(train_X_combined_3, train_y, val_X_combined_3)
 
+print(f"Number of train samples: {train_X_combined_.shape} and test samples: {temp_pred_combined.shape}")
 
 temp_label = test_y_
 temp_pred_rad = temp_pred_rad[:, 1]
@@ -253,6 +248,182 @@ cm = confusion_matrix(temp_pred_combined_3, temp_label)
 print(cm)
 specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
 print('Combined with RW:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'only_l2_brats')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
+    test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_vit, train_label=train_y_, test_features=test_X_vit)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+# Radiomics Combined with SSL
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'only_l2_brats')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+
+train_X_combined_3_ = np.concatenate((train_X_rad_, train_X_vit), axis=-1)
+test_X_combined_3_ = np.concatenate((test_X_rad_, test_X_vit), axis=-1)
+
+
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_combined_3_[:, ii] = min_max_normalize(train_X_combined_3_[:, ii], 1)
+    test_X_combined_3_[:, ii] = min_max_normalize(test_X_combined_3_[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_combined_3_, train_label=train_y_, test_features=test_X_combined_3_)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL Combined with Radiomics:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+# SSL Perceptual
+print("SSL Perceptual")
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'all_comps')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
+    test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_vit, train_label=train_y_, test_features=test_X_vit)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL Perceptual:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+# Radiomics Combined with SSL
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'all_comps')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_ssl_features.npy'))
+
+train_X_combined_3_ = np.concatenate((train_X_rad_, train_X_vit), axis=-1)
+test_X_combined_3_ = np.concatenate((test_X_rad_, test_X_vit), axis=-1)
+
+
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_combined_3_[:, ii] = min_max_normalize(train_X_combined_3_[:, ii], 1)
+    test_X_combined_3_[:, ii] = min_max_normalize(test_X_combined_3_[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_combined_3_, train_label=train_y_, test_features=test_X_combined_3_)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL Perceptual Combined with Radiomics:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+# SSL Perceptual + Contrastive
+print("SSL Perceptual + Contrastive")
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'all_comps_contrast')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_contrast_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_contrast_ssl_features.npy'))
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_vit[:, ii] = min_max_normalize(train_X_vit[:, ii], 1)
+    test_X_vit[:, ii] = min_max_normalize(test_X_vit[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_vit, train_label=train_y_, test_features=test_X_vit)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL Perceptual + Contrastive:')
+print('specificity:', specificity)
+sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
+print('sensitivity:', sensitivity)
+
+
+# Radiomics Combined with SSL
+# TODO: Maybe include the plotting etc later
+ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'brats', 'ssl_features_dir', 'all_comps_contrast')
+train_X_vit = np.load(os.path.join(ssl_feature_dir, 'train_contrast_ssl_features.npy'))
+test_X_vit = np.load(os.path.join(ssl_feature_dir, 'test_contrast_ssl_features.npy'))
+
+train_X_combined_3_ = np.concatenate((train_X_rad_, train_X_vit), axis=-1)
+test_X_combined_3_ = np.concatenate((test_X_rad_, test_X_vit), axis=-1)
+
+
+# TODO: Should we load train_y_ from our splits???
+# Normalize the features
+for ii in range(np.shape(train_X_vit)[1]):
+    train_X_combined_3_[:, ii] = min_max_normalize(train_X_combined_3_[:, ii], 1)
+    test_X_combined_3_[:, ii] = min_max_normalize(test_X_combined_3_[:, ii], 1)
+
+temp_pred_vit = classification(train_features=train_X_combined_3_, train_label=train_y_, test_features=test_X_combined_3_)
+temp_pred_vit = temp_pred_vit[:, 1]
+
+
+
+temp_pred_vit[temp_pred_vit>=0.5] = 1
+temp_pred_vit[temp_pred_vit<0.5] = 0
+cm = confusion_matrix(temp_pred_vit, temp_label)
+print(cm)
+specificity= cm[0, 0]/(cm[0, 0]+cm[1, 0])
+print('SSL Perceptual + Contrastive Combined with Radiomics:')
 print('specificity:', specificity)
 sensitivity =  cm[1, 1]/(cm[1, 1]+cm[0, 1])
 print('sensitivity:', sensitivity)
