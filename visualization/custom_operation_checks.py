@@ -2,7 +2,7 @@ import os
 
 from torch.utils.tensorboard import SummaryWriter
 
-from dataset.brain_tumor.pretrain_tumor_data import build_dataset
+from dataset.brats_dataset.brats import build_dataset
 from environment_setup import PROJECT_ROOT_DIR
 from model.model_utils.gaussian_filter import perform_3d_gaussian_blur
 from model.model_utils.sobel_filter import SobelFilter3d

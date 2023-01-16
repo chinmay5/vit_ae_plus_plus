@@ -243,9 +243,11 @@ class ContrastiveMAEViT(MaskedAutoencoderViT):
                  embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
                  mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False, args=None, use_proj=False):
-        super().__init__(volume_size=volume_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim, depth=depth,
+        super().__init__(volume_size=volume_size, patch_size=patch_size, in_chans=in_chans, embed_dim=embed_dim,
+                         depth=depth,
                          num_heads=num_heads, decoder_num_heads=decoder_num_heads, decoder_embed_dim=decoder_embed_dim,
-                         decoder_depth=decoder_depth, mlp_ratio=mlp_ratio, norm_layer=norm_layer, norm_pix_loss=norm_pix_loss, args=args)
+                         decoder_depth=decoder_depth, mlp_ratio=mlp_ratio, norm_layer=norm_layer,
+                         norm_pix_loss=norm_pix_loss, args=args)
 
         # build a 3-layer projector
         self.use_proj = use_proj
@@ -277,6 +279,7 @@ class ContrastiveMAEViT(MaskedAutoencoderViT):
         # First we reshape the tensors so that they can be handled easily
         latent1 = latent1.view(-1, latent1.shape[2])
         latent2 = latent2.view(-1, latent2.shape[2])
+
         p1 = self.predictor(latent1)
         p2 = self.predictor(latent2)
         return loss, pred, mask, p1, p2, latent1.detach(), latent2.detach()
@@ -297,12 +300,14 @@ def mae_vit_base_patch16_dec512d8b(**kwargs):
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
 
+
 def contr_mae_vit_base_patch16_dec512d8b(**kwargs):
     model = ContrastiveMAEViT(
         embed_dim=768, depth=12, num_heads=12,
         decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
         mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model
+
 
 # set recommended archs
 mae_vit_base_patch16 = mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
@@ -311,7 +316,7 @@ contr_mae_vit_base_patch16 = contr_mae_vit_base_patch16_dec512d8b  # decoder: 51
 
 if __name__ == '__main__':
     image_size = (96, 96, 96)
-    model = contr_mae_vit_base_patch16(volume_size=image_size, in_chans=3, patch_size=8)
+    model = mae_vit_large_patch16(volume_size=image_size, in_chans=3, patch_size=8)
     sample_img = torch.randn(8, 3, 96, 96, 96)
     loss, pred, mask, p1, p2, z1, z2 = model(sample_img, sample_img)
     print(pred.shape)

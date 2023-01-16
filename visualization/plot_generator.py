@@ -137,8 +137,8 @@ def show_mask_ratio_plot():
 
     fig, ax = plt.subplots()
 
-    ax.plot(lambda_, specificity, color='red', marker='o', alpha=0.50, linewidth=2.0, label='Specificity')
-    ax.plot(lambda_, sensitivity, color='green', marker='+', alpha=0.50, linewidth=2.0, label='Sensitivity')
+    # ax.plot(lambda_, specificity, color='red', marker='o', alpha=0.50, linewidth=2.0, label='Specificity')
+    # ax.plot(lambda_, sensitivity, color='green', marker='+', alpha=0.50, linewidth=2.0, label='Sensitivity')
     ax.plot(lambda_, auc, color='blue', marker='*', alpha=0.55, linewidth=2.0, label='AUC')
     ax.plot()
     # ax.axis('equal')

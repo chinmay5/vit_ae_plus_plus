@@ -25,7 +25,7 @@ def generate_plots():
     print(df.shape)
     print(features)
     # Including the radiomics features
-    SPLIT_SAVE_FILE_PATH = os.path.join(PROJECT_ROOT_DIR, "dataset", "large_brats")
+    SPLIT_SAVE_FILE_PATH = os.path.join(PROJECT_ROOT_DIR, "dataset", "egd_dataset")
     radiomics_test_features = np.load(os.path.join(SPLIT_SAVE_FILE_PATH, 'radiomic_features_mapped.npy'))
     radiomics_labels = np.load(os.path.join(SPLIT_SAVE_FILE_PATH, 'radiomics_labels_mapped.npy'))
 
@@ -75,7 +75,7 @@ def generate_plots():
 
 
 def read_contrastive_feat(FILENAME='large_brats_one_stage'):
-    ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'large_brats', 'ssl_features_dir', FILENAME)
+    ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'egd_dataset', 'ssl_features_dir', FILENAME)
     # train_features = np.load(os.path.join(ssl_feature_dir, f'train_contrast_ssl_features_split_{0}.npy'))
     # test_features = np.load(os.path.join(ssl_feature_dir, f'test_contrast_ssl_features_split_{0}.npy'))
     test_features = np.load(os.path.join(ssl_feature_dir, f'test_contrast_ssl_features.npy'))
@@ -85,7 +85,7 @@ def read_contrastive_feat(FILENAME='large_brats_one_stage'):
 
 
 def read_perceptual_feat(FILENAME='large_brats_ssl'):
-    ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'large_brats', 'ssl_features_dir', FILENAME)
+    ssl_feature_dir = os.path.join(PROJECT_ROOT_DIR, 'egd_dataset', 'ssl_features_dir', FILENAME)
     test_features = np.load(os.path.join(ssl_feature_dir, f'test_ssl_features.npy'))
     return test_features
 

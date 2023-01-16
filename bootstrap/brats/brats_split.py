@@ -4,7 +4,6 @@ import sys
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-from bootstrap.parse_duke_bc_xslx_data import sanity_check
 
 base_dir = '/mnt/cat/chinmay/brats_processed'
 file_path = os.path.join(base_dir, 'data', 'image', 'flair_all.npy')
@@ -19,6 +18,13 @@ file_locs = {"train_img_path": os.path.join(save_folder, 'x_train_ssl.npy'),
              "val_label_path": os.path.join(save_folder, 'y_val_ssl.npy'),
              "test_label_path": os.path.join(save_folder, 'y_test_ssl.npy')
              }
+
+
+def sanity_check(train_split, val_split, test_split):
+    train_set, val_set, test_set = set(train_split), set(val_split), set(test_split)
+    length_arr = [len(train_set.intersection(val_set)), len(train_set.intersection(test_set)),
+                  len(test_set.intersection(val_set))]
+    return all([x == 0 for x in length_arr])
 
 
 def split_brats_data():

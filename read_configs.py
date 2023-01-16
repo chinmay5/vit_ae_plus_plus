@@ -49,7 +49,7 @@ def bootstrap(args, key='SETUP'):
     args.num_classes = parser['DATASET'].getint('num_classes')
     args.split = parser['DATASET'].get('split', fallback='idh')
     args.perceptual_weight = parser[key].getint('perceptual_weight', fallback=0)
-    args.contr_weight = parser[key].getint('contr_weight', fallback=0)
+    args.contr_weight = parser[key].getfloat('contr_weight', fallback=0.0)
     args.only_test_split = parser[key].getboolean('only_test_split', fallback=False)
     args.common_path = parser[key].get('common_path', fallback=None)
     args.checkpoint_perc = parser[key].get('checkpoint_perc', fallback=None)
@@ -58,4 +58,7 @@ def bootstrap(args, key='SETUP'):
     args.use_imagenet = parser[key].getboolean('use_imagenet', fallback=False)
     args.use_edge_map = parser[key].getboolean('use_edge_map', fallback=True)
     args.volume_size = parser['DATASET'].getint('volume_size', fallback=96)
+    args.use_barlow = parser['SETUP'].getboolean('use_barlow', fallback=False)
+    args.fix_backbone = parser['FINE_TUNE_K_FOLD'].getboolean('fix_backbone', fallback=None)
+
     return args

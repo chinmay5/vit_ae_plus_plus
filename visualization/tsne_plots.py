@@ -7,10 +7,10 @@ from sklearn.manifold import TSNE
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import OneHotEncoder
 
-from ablation.train_3d_resnet import get_all_feat_und_labels
+from k_fold_training_scripts.train_3d_resnet import get_all_feat_und_labels
 from dataset.dataset_factory import get_dataset
 from environment_setup import PROJECT_ROOT_DIR
-from fine_tune.contrastive_training import get_args_parser
+from post_training_utils.two_stage_contrastive_training import get_args_parser
 from model.model_factory import get_models
 from model.model_utils.vit_helpers import interpolate_pos_embed
 from read_configs import bootstrap

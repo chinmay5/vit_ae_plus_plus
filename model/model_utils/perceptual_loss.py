@@ -1,7 +1,11 @@
+import os
+
 import torch
 from torchvision import models as tv
 
 from collections import namedtuple
+
+from environment_setup import PROJECT_ROOT_DIR
 
 
 class vgg_perceptual_loss(torch.nn.Module):
@@ -14,12 +18,10 @@ class vgg_perceptual_loss(torch.nn.Module):
         else:
             print("Using VGG SSL features for training")
             vgg_pretrained_model = tv.vgg16(pretrained=False)
-            model_num = 'ckp-399.pth'
+            model_path = os.path.join(PROJECT_ROOT_DIR, 'model', 'ckp-399.pth')
             vgg_pretrained_model.load_state_dict(
-                torch.load(f'/home/chinmayp/workspace/swav/vgg_tumor_train/checkpoints/{model_num}'), strict=False)
+                torch.load(model_path), strict=False)
             vgg_pretrained_features = vgg_pretrained_model.eval().features
-
-
 
         self.slice1 = torch.nn.Sequential()
         self.slice2 = torch.nn.Sequential()
