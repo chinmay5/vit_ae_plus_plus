@@ -11,12 +11,10 @@ import torch
 from sklearn.model_selection import StratifiedKFold
 from timm.optim import optim_factory
 
-import post_training_utils
 from utils.misc import NativeScalerWithGradNormCount as NativeScaler
 from torch.backends import cudnn
 from torch.utils.tensorboard import SummaryWriter
 
-import training_script
 from k_fold_training_scripts.train_3d_resnet import get_all_feat_and_labels
 from dataset.dataset_factory import get_dataset
 from environment_setup import PROJECT_ROOT_DIR
@@ -27,6 +25,7 @@ from utils import misc
 import torchio as tio
 
 from utils.feature_extraction import generate_features
+from utils.train_one_epoch import train_one_stage_epoch
 
 
 def get_args_parser():
@@ -186,7 +185,7 @@ def main(args):
                 edge_map_weight = 0
             else:
                 edge_map_weight = 0.01 * (1 - epoch / args.epochs)
-            train_stats = training_script.train_one_stage_epoch(
+            train_stats = train_one_stage_epoch(
                 model, data_loader_train,
                 optimizer, device, epoch, loss_scaler,
                 log_writer=log_writer,
