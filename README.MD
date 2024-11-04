@@ -16,7 +16,7 @@ Some configurations in this file are essential such as the ones in the `K_FOLD` 
 
 ### Training the model
 
-Download `ckp-399.pth` pretrained model weights from [here](https://filesender.switch.ch/filesender2/?s=download&token=d1c823e2-d80e-492a-94aa-0c6146692731) and save it in the `model` folder. The model weights are necessary for using the perceptual loss.
+Download `ckp-399.pth` pretrained model weights from [here](https://syncandshare.lrz.de/getlink/fi8v4ABfpqNkE2oNf6JVZX/ckp-399.pth) and save it in the `model` folder. The model weights are necessary for using the perceptual loss.
 
 Please use `k_fold_cross_valid_combined_brats.py` and `k_fold_cross_valid_combined_egd.py` to train models and extract ssl features for each split. 
 
